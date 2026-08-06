@@ -1,0 +1,1672 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>문화 클럽 로그 - 책 & 영화 모임 커뮤니티</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Google Fonts: Noto Sans KR & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    window.FirebaseSDK = {
+      initializeApp, getAuth, signInAnonymously, signInWithCustomToken,
+      getFirestore, collection, doc, setDoc, addDoc, updateDoc, onSnapshot
+    };
+  </script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Noto Sans KR"', 'sans-serif'],
+            outfit: ['"Outfit"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              book: '#F59E0B',   // Amber for Books
+              movie: '#E11D48',  // Rose/Red for Movies
+              accent: '#6366F1', // Indigo Accent
+              dark: '#0B0F19'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+
+    .glass-card {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .glass-nav {
+      background: rgba(11, 15, 25, 0.88);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .star-btn {
+      transition: transform 0.15s ease, color 0.15s ease;
+    }
+    .star-btn:hover {
+      transform: scale(1.25);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .poster-glow:hover {
+      box-shadow: 0 12px 30px -10px rgba(99, 102, 241, 0.3);
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans antialiased text-slate-100 bg-slate-950">
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-40 glass-nav">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        
+        <!-- Logo & Title -->
+        <div class="flex items-center gap-3 cursor-pointer" onclick="switchTab('feed')">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <i class="fa-solid fa-clapperboard text-lg text-white"></i>
+          </div>
+          <div>
+            <h1 class="font-extrabold text-lg tracking-tight text-white flex items-center gap-2 font-outfit">
+              CULTURE LOG <span class="text-xs font-semibold font-sans px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">북&무비 모임</span>
+            </h1>
+            <p class="text-[11px] text-slate-400 hidden sm:block">우리들만의 책 & 영화 리뷰 라이브러리</p>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="hidden md:flex items-center space-x-1">
+          <button onclick="switchTab('search')" id="nav-tab-search" class="nav-tab flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition text-slate-300 hover:text-white hover:bg-slate-800">
+            <i class="fa-solid fa-magnifying-glass text-xs"></i> Open API 검색 & 기록
+          </button>
+          <button onclick="switchTab('feed')" id="nav-tab-feed" class="nav-tab active flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition text-indigo-400 bg-indigo-500/10 border border-indigo-500/20">
+            <i class="fa-solid fa-layer-group text-xs"></i> 피드 & 그리드
+            <span id="feed-count-badge" class="ml-1 px-1.5 py-0.2 text-[10px] font-extrabold rounded-full bg-rose-500 text-white">0</span>
+          </button>
+          <button onclick="switchTab('stats')" id="nav-tab-stats" class="nav-tab flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition text-slate-300 hover:text-white hover:bg-slate-800">
+            <i class="fa-solid fa-chart-pie text-xs"></i> 모임 통계 & 멤버
+          </button>
+        </nav>
+
+        <!-- Member Profile Switcher -->
+        <div class="flex items-center gap-3">
+          <div class="relative inline-block text-left">
+            <div class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-full pl-2 pr-3.5 py-1 cursor-pointer transition shadow-sm" onclick="toggleUserMenu()">
+              <div id="current-user-avatar" class="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center font-extrabold text-xs ring-2 ring-indigo-400/50">
+                민
+              </div>
+              <div class="text-left leading-tight">
+                <span class="block text-[10px] text-slate-400">작성자 선택</span>
+                <span id="current-user-name" class="text-xs font-bold text-slate-200">민우</span>
+              </div>
+              <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 ml-1"></i>
+            </div>
+
+            <!-- User Switcher Dropdown Menu -->
+            <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-52 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl z-50 py-2 animate-fade-in">
+              <div class="px-3.5 py-1.5 border-b border-slate-800">
+                <p class="text-[11px] font-medium text-slate-400">현재 활동할 친구 선택</p>
+              </div>
+              <div id="user-list-container" class="max-h-48 overflow-y-auto py-1">
+                <!-- Dynamically populated user list -->
+              </div>
+              <div class="border-t border-slate-800 pt-1.5 px-2">
+                <button onclick="promptAddFriend()" class="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-indigo-400 hover:bg-indigo-500/10 flex items-center gap-2 transition">
+                  <i class="fa-solid fa-user-plus text-[10px]"></i> 새 친구 등록하기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Mobile Navigation Tab Bar -->
+    <div class="md:hidden border-t border-slate-800 bg-slate-900/95 flex justify-around py-2 px-1">
+      <button onclick="switchTab('search')" id="mobile-nav-search" class="flex flex-col items-center gap-1 text-slate-400 text-xs font-medium">
+        <i class="fa-solid fa-magnifying-glass text-sm"></i>
+        <span>검색/등록</span>
+      </button>
+      <button onclick="switchTab('feed')" id="mobile-nav-feed" class="flex flex-col items-center gap-1 text-indigo-400 text-xs font-medium">
+        <i class="fa-solid fa-layer-group text-sm"></i>
+        <span>피드/그리드</span>
+      </button>
+      <button onclick="switchTab('stats')" id="mobile-nav-stats" class="flex flex-col items-center gap-1 text-slate-400 text-xs font-medium">
+        <i class="fa-solid fa-chart-pie text-sm"></i>
+        <span>통계/멤버</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- ===================================================================
+         TAB 1: OPEN API SEARCH & LOG CREATION
+         =================================================================== -->
+    <section id="tab-search" class="hidden space-y-6">
+      
+      <!-- Search Banner & Input Card -->
+      <div class="glass-card rounded-3xl p-6 md:p-8 relative overflow-hidden border border-slate-800">
+        <div class="absolute -right-12 -top-12 w-64 h-64 bg-gradient-to-br from-amber-500/15 via-rose-500/15 to-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+        
+        <div class="max-w-2xl relative z-10">
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-semibold mb-3">
+            <i class="fa-solid fa-globe text-[11px]"></i> Kakao & TMDB Open API Realtime Search
+          </span>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            어떤 책이나 영화를 감상하셨나요?
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
+            API에서 실시간 데이터를 가져옵니다. 원하는 작품을 검색하고 평점과 한줄평을 등록해보세요.
+          </p>
+
+          <!-- Type Selector & Search Controls -->
+          <div class="mt-6 flex flex-col sm:flex-row gap-3">
+            
+            <!-- Category Toggle Buttons -->
+            <div class="inline-flex rounded-2xl bg-slate-900/90 p-1 border border-slate-800 self-start sm:self-auto shrink-0">
+              <button id="search-type-book" onclick="setSearchType('book')" class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition bg-amber-500 text-slate-950 shadow-md">
+                <i class="fa-solid fa-book"></i> 책 (Kakao API)
+              </button>
+              <button id="search-type-movie" onclick="setSearchType('movie')" class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition text-slate-400 hover:text-white">
+                <i class="fa-solid fa-film"></i> 영화 (TMDB API)
+              </button>
+            </div>
+
+            <!-- Search Input Form -->
+            <form onsubmit="handleSearch(event)" class="flex-1 flex items-center gap-2">
+              <div class="relative flex-1">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="search-input" placeholder="책 제목, 저자 또는 영화 제목을 입력하세요..." class="w-full bg-slate-900/90 border border-slate-700/80 text-slate-100 rounded-2xl pl-10 pr-10 py-2.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 placeholder-slate-500 shadow-inner">
+                <button type="button" onclick="clearSearchInput()" id="btn-clear-search" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-xs">
+                  <i class="fa-solid fa-circle-xmark"></i>
+                </button>
+              </div>
+              <button type="submit" class="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm transition shadow-lg shadow-indigo-600/30 flex items-center gap-2 shrink-0">
+                <span>검색</span>
+              </button>
+            </form>
+          </div>
+
+          <!-- Quick Recommendation Chips -->
+          <div class="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <span class="font-semibold text-slate-400 flex items-center gap-1">
+              <i class="fa-solid fa-fire text-rose-500 text-[11px]"></i> 인기 검색어:
+            </span>
+            <div id="quick-tags-container" class="flex flex-wrap gap-1.5">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search Header & Results Grid -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-slate-200 flex items-center gap-2">
+          <i id="search-results-icon" class="fa-solid fa-book text-amber-500"></i>
+          <span id="search-results-title">검색 결과</span>
+          <span id="search-count-tag" class="text-xs bg-slate-800 text-slate-400 px-2.5 py-0.5 rounded-full font-normal">검색어를 입력해보세요</span>
+        </h3>
+        <div class="text-xs text-slate-400 flex items-center gap-1.5" id="cloud-status-indicator">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="cloud-status-text">실시간 클라우드 DB 연동 준비됨</span>
+        </div>
+      </div>
+
+      <div id="search-results-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <!-- Initial empty state -->
+        <div class="col-span-full py-16 text-center text-slate-500">
+          <div class="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 mx-auto flex items-center justify-center text-slate-600 mb-3 text-2xl">
+            <i class="fa-solid fa-compass"></i>
+          </div>
+          <p class="text-base font-bold text-slate-300">읽은 책이나 본 영화를 검색해 보세요!</p>
+          <p class="text-xs text-slate-500 mt-1">상단 검색창에 키워드를 입력하면 Kakao / TMDB API에서 실시간 정보를 받아옵니다.</p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ===================================================================
+         TAB 2: CULTURE LOG FEED & GRID VIEW
+         =================================================================== -->
+    <section id="tab-feed" class="space-y-6 animate-fade-in">
+
+      <!-- Hero Banner Highlight Card -->
+      <div id="hero-banner-container" class="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-indigo-950/60 p-6 md:p-8 shadow-2xl">
+        <div class="absolute right-0 top-0 bottom-0 w-1/2 opacity-20 pointer-events-none bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-500 via-rose-500 to-transparent"></div>
+        
+        <div class="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div class="space-y-2 max-w-xl">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-bold">
+              <i class="fa-solid fa-crown text-amber-400"></i> 이달의 대표 감상평
+            </div>
+            <h2 id="hero-title" class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+              책과 영화로 이어지는 친구들의 이야기
+            </h2>
+            <p id="hero-sub" class="text-xs sm:text-sm text-slate-300 line-clamp-2 leading-relaxed">
+              작품을 같이 읽고 감상을 나누며 서로의 시선을 공유해보세요.
+            </p>
+            <div id="hero-meta" class="flex items-center gap-3 pt-2 text-xs text-slate-400">
+              <span class="text-amber-400 font-bold flex items-center gap-1"><i class="fa-solid fa-star"></i> 5.0</span>
+              <span>·</span>
+              <span id="hero-author" class="text-slate-200 font-semibold">클럽 멤버 전체</span>
+            </div>
+          </div>
+
+          <button onclick="switchTab('search')" class="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-600 hover:opacity-95 text-slate-950 font-extrabold text-xs sm:text-sm transition shadow-lg shrink-0 flex items-center gap-2">
+            <i class="fa-solid fa-plus text-xs"></i> 새 감상평 등록하기
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Bar & Display Layout Switcher -->
+      <div class="glass-card rounded-2xl p-4 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        
+        <!-- Filter Selectors -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <!-- Type Filter -->
+          <select id="feed-filter-type" onchange="renderFeed()" class="bg-slate-900 border border-slate-700/80 text-xs font-medium text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="all">전체 (책 + 영화)</option>
+            <option value="book">📚 책 리뷰만</option>
+            <option value="movie">🎬 영화 리뷰만</option>
+          </select>
+
+          <!-- User Filter -->
+          <select id="feed-filter-user" onchange="renderFeed()" class="bg-slate-900 border border-slate-700/80 text-xs font-medium text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="all">모든 작성자</option>
+            <!-- Rendered dynamically -->
+          </select>
+
+          <!-- Sort Filter -->
+          <select id="feed-sort" onchange="renderFeed()" class="bg-slate-900 border border-slate-700/80 text-xs font-medium text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="latest">최신 등록순</option>
+            <option value="highest">평점 높은순</option>
+            <option value="lowest">평점 낮은순</option>
+            <option value="comments">댓글 많은순</option>
+          </select>
+        </div>
+
+        <!-- Layout Mode Switcher (Grid vs List Feed) -->
+        <div class="flex items-center gap-2 border-t md:border-t-0 border-slate-800 pt-3 md:pt-0 justify-between md:justify-end">
+          <span class="text-xs text-slate-400 font-medium">보기 방식:</span>
+          <div class="inline-flex rounded-xl bg-slate-900 p-1 border border-slate-800">
+            <button id="view-mode-grid" onclick="setViewMode('grid')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition bg-indigo-600 text-white shadow">
+              <i class="fa-solid fa-border-all"></i> 포스터 그리드
+            </button>
+            <button id="view-mode-feed" onclick="setViewMode('feed')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white">
+              <i class="fa-solid fa-list-ul"></i> 피드 타임라인
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Culture Log Items Container -->
+      <div id="culture-log-container">
+        <!-- Rendered dynamically (Grid or Feed) -->
+      </div>
+
+    </section>
+
+    <!-- ===================================================================
+         TAB 3: CLUB STATS & MEMBERS DASHBOARD
+         =================================================================== -->
+    <section id="tab-stats" class="hidden space-y-6">
+      
+      <!-- Analytics Stat Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <div class="glass-card rounded-2xl p-5 border border-slate-800">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-slate-400">총 기록된 문화 콘텐츠</span>
+            <div class="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-base">
+              <i class="fa-solid fa-layer-group"></i>
+            </div>
+          </div>
+          <div class="mt-3">
+            <span id="stat-total-reviews" class="text-3xl font-extrabold text-white font-outfit">0</span>
+            <span class="text-xs text-slate-400 ml-1">개</span>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 border border-slate-800">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-amber-400">읽은 책 (도서)</span>
+            <div class="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-base">
+              <i class="fa-solid fa-book"></i>
+            </div>
+          </div>
+          <div class="mt-3">
+            <span id="stat-book-count" class="text-3xl font-extrabold text-white font-outfit">0</span>
+            <span class="text-xs text-slate-400 ml-1">권</span>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 border border-slate-800">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-rose-400">관람한 영화</span>
+            <div class="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-base">
+              <i class="fa-solid fa-film"></i>
+            </div>
+          </div>
+          <div class="mt-3">
+            <span id="stat-movie-count" class="text-3xl font-extrabold text-white font-outfit">0</span>
+            <span class="text-xs text-slate-400 ml-1">편</span>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 border border-slate-800">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-emerald-400">나눈 댓글 대화</span>
+            <div class="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-base">
+              <i class="fa-solid fa-comments"></i>
+            </div>
+          </div>
+          <div class="mt-3">
+            <span id="stat-comment-count" class="text-3xl font-extrabold text-white font-outfit">0</span>
+            <span class="text-xs text-slate-400 ml-1">개</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Members Activity Leaderboard -->
+        <div class="lg:col-span-2 glass-card rounded-2xl p-6 border border-slate-800">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-users text-indigo-400"></i>
+              모임 친구 목록 및 활동 현황
+            </h3>
+            <button onclick="promptAddFriend()" class="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow">
+              <i class="fa-solid fa-user-plus text-[10px]"></i> 친구 추가
+            </button>
+          </div>
+
+          <div id="friends-stats-list" class="space-y-3">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Storage & Data Management Card -->
+        <div class="glass-card rounded-2xl p-6 border border-slate-800 flex flex-col justify-between space-y-6">
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2 mb-2">
+              <i class="fa-solid fa-database text-amber-400"></i>
+              실시간 클라우드 공유 & 데이터 백업
+            </h3>
+            <p class="text-xs text-slate-400 leading-relaxed mb-4">
+              Firebase Firestore 클라우드 DB를 통해 깃허브(GitHub Pages)에 배포해도 모든 친구들이 실시간으로 같은 리뷰와 댓글을 공유할 수 있습니다.
+            </p>
+
+            <div class="space-y-2.5">
+              <button onclick="openFirebaseConfigModal()" class="w-full px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20">
+                <i class="fa-solid fa-cloud text-amber-300"></i> Firebase 클라우드 DB 연동 설정
+              </button>
+              <button onclick="exportDataJSON()" class="w-full px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition border border-slate-700 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-download text-indigo-400"></i> 백업 데이터 다운로드 (JSON)
+              </button>
+              <button onclick="resetToDemoData()" class="w-full px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition border border-slate-700 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-arrows-rotate text-amber-400"></i> 샘플 데이터로 복원
+              </button>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-800 text-[11px] text-slate-500 space-y-1">
+            <p><i class="fa-solid fa-check text-emerald-400 text-[9px] mr-1"></i> Firebase Realtime Firestore Sync</p>
+            <p><i class="fa-solid fa-check text-emerald-400 text-[9px] mr-1"></i> Kakao Book API & TMDB Realtime Data</p>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- MODAL: WRITE REVIEW & ONE-LINER -->
+  <div id="review-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+    <div class="relative w-full max-w-xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden my-8 animate-fade-in">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
+        <div class="flex items-center gap-2.5">
+          <span id="modal-category-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-slate-950">📚 책</span>
+          <h3 class="text-base font-bold text-white">평점 & 한줄평 남기기</h3>
+        </div>
+        <button onclick="closeReviewModal()" class="text-slate-400 hover:text-white p-1 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <form onsubmit="saveReview(event)" class="p-6 space-y-5">
+        
+        <!-- Target Content Preview Card -->
+        <div class="flex gap-4 p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+          <img id="modal-item-cover" src="" alt="Cover" class="w-16 h-22 object-cover rounded-xl border border-slate-800 shrink-0 bg-slate-900">
+          <div class="flex-1 min-w-0">
+            <h4 id="modal-item-title" class="text-sm font-bold text-white truncate">작품 제목</h4>
+            <p id="modal-item-sub" class="text-xs text-slate-400 mt-0.5 truncate">저자 / 감독 정보</p>
+            <p id="modal-item-desc" class="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">줄거리 설명</p>
+          </div>
+        </div>
+
+        <!-- Star Rating Picker -->
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-2">
+            평점 선택 <span class="text-amber-400 font-extrabold" id="selected-rating-text">(5.0 / 5.0)</span>
+          </label>
+          <div class="flex items-center gap-2" id="star-rating-picker">
+            <button type="button" onclick="setRating(1)" class="star-btn text-2xl text-amber-400"><i class="fa-solid fa-star"></i></button>
+            <button type="button" onclick="setRating(2)" class="star-btn text-2xl text-amber-400"><i class="fa-solid fa-star"></i></button>
+            <button type="button" onclick="setRating(3)" class="star-btn text-2xl text-amber-400"><i class="fa-solid fa-star"></i></button>
+            <button type="button" onclick="setRating(4)" class="star-btn text-2xl text-amber-400"><i class="fa-solid fa-star"></i></button>
+            <button type="button" onclick="setRating(5)" class="star-btn text-2xl text-amber-400"><i class="fa-solid fa-star"></i></button>
+          </div>
+        </div>
+
+        <!-- One-line Review (한줄평) -->
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1">
+            한줄평 <span class="text-rose-400">*</span> (작품을 요약하는 인상 깊은 한 문장)
+          </label>
+          <input type="text" id="review-one-liner" required placeholder="예: '마음이 따뜻해지는 감동적인 명작!'" class="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 placeholder-slate-500">
+        </div>
+
+        <!-- Detailed Review & Club Discussion Topic -->
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1">
+            상세 감상평 & 모임 토론 주제 (선택)
+          </label>
+          <textarea id="review-detail" rows="3" placeholder="친구들과 모임에서 이야기 나누고 싶은 인상 깊은 장면이나 질문을 적어보세요..." class="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 placeholder-slate-500"></textarea>
+        </div>
+
+        <!-- Current Active User Display -->
+        <div class="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800">
+          <span>작성자: <strong id="modal-author-name" class="text-indigo-400">민우</strong></span>
+          <span class="text-[11px] text-slate-500">등록 즉시 전체 모임 피드에 반영됩니다.</span>
+        </div>
+
+        <!-- Submit Buttons -->
+        <div class="flex items-center justify-end gap-3 pt-2">
+          <button type="button" onclick="closeReviewModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 transition">
+            취소
+          </button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center gap-2">
+            <i class="fa-solid fa-paper-plane text-xs"></i> 감상평 남기기
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: POST DETAIL & COMMENT THREAD -->
+  <div id="post-detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+    <div class="relative w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden my-8 animate-fade-in">
+      
+      <!-- Detail Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
+        <div class="flex items-center gap-3" id="detail-header-info">
+          <!-- Populated dynamically -->
+        </div>
+        <button onclick="closePostDetailModal()" class="text-slate-400 hover:text-white p-1 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Detail Body -->
+      <div id="detail-modal-body" class="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+        <!-- Populated dynamically -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: FIREBASE CONFIG SETTINGS -->
+  <div id="firebase-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+    <div class="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden my-8 animate-fade-in">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
+        <div class="flex items-center gap-2.5">
+          <span class="p-1.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20"><i class="fa-solid fa-fire text-sm"></i></span>
+          <h3 class="text-base font-bold text-white">Firebase 클라우드 DB 연동</h3>
+        </div>
+        <button onclick="closeFirebaseConfigModal()" class="text-slate-400 hover:text-white p-1 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <form onsubmit="saveCustomFirebaseConfig(event)" class="p-6 space-y-4">
+        <p class="text-xs text-slate-300 leading-relaxed">
+          Google Firebase의 내 프로젝트 <strong class="text-amber-400">firebaseConfig</strong> 설정 객체(JSON)를 아래 붙여넣으시면, 깃허브 배포 후에도 모든 친구들이 실시간으로 같은 커뮤니티 데이터를 이용할 수 있습니다.
+        </p>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1">
+            Firebase Config (JSON 형태)
+          </label>
+          <textarea id="firebase-config-input" rows="6" placeholder='{
+  "apiKey": "AIzaSy...",
+  "authDomain": "your-app.firebaseapp.com",
+  "projectId": "your-app-id",
+  "storageBucket": "your-app.appspot.com",
+  "messagingSenderId": "123456789",
+  "appId": "1:123456789:web:abc123"
+}' class="w-full bg-slate-950 font-mono text-xs text-emerald-400 border border-slate-700/80 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"></textarea>
+        </div>
+
+        <div class="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+          <p><i class="fa-solid fa-circle-info text-indigo-400 mr-1"></i> 설정하지 않아도 브라우저 LocalStorage로 기본 저장됩니다.</p>
+          <p><i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i> 파이어베이스 콘솔 -> Firestore Database 규칙을 `allow read, write: if true;`로 설정하세요.</p>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-2">
+          <button type="button" onclick="closeFirebaseConfigModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 transition">
+            취소
+          </button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg transition">
+            클라우드 DB 저장 & 연결
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <script>
+    /* ==========================================================================
+       OPEN API KEYS, FIREBASE STATE & GLOBAL APP LOGIC
+       ========================================================================== */
+    // ⚠️ 참고: 이 웹앱은 서버 없이 브라우저에서 바로 API를 호출하는 구조라서,
+    // 아래 키는 사이트 소스보기(우클릭 → 페이지 소스 보기)를 통해 누구나 볼 수 있습니다.
+    // 완전히 숨기려면 별도의 서버(백엔드)가 필요하지만, 개인/소규모 친구 모임용이라면
+    // 이대로 사용해도 괜찮습니다. 다만 키가 외부에 뿌려지지 않도록 주의해 주세요.
+    const KAKAO_API_KEY = "c983a472407e0547534b6b3cf1797603";
+    const TMDB_API_KEY = "830703efc489053392e33acd6b820a1e";
+
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'culture-log-app';
+
+    let db = null;
+    let auth = null;
+    let currentUser = null;
+    let isFirebaseConnected = false;
+
+    let state = {
+      searchType: 'book',      // 'book' or 'movie'
+      currentTab: 'feed',       // 'search', 'feed', 'stats'
+      viewMode: 'grid',        // 'grid' or 'feed'
+      activeUser: '민우',
+      friends: ['민우', '지은', '수현', '태호'],
+      selectedRating: 5,
+      reviews: [],             // Saved culture logs
+      activeSearchItem: null   // Item being reviewed in modal
+    };
+
+    const HOT_KEYWORDS = {
+      book: ['소년이 온다', '불편한 편의점', '모순', '초역 부처의 말', '세이노의 가르침'],
+      movie: ['인사이드 아웃 2', '파묘', '인터스텔라', '헤어질 결심', '듄: 파트2']
+    };
+
+    // Initial Seed Data for Demo
+    const INITIAL_SEED_REVIEWS = [
+      {
+        id: "book_1",
+        type: "book",
+        title: "소년이 온다",
+        subTitle: "한강 저 · 창비",
+        coverUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&auto=format&fit=crop&q=80",
+        rating: 5,
+        oneLiner: "역사의 아픔을 가슴 깊이 새기게 하는 묵직하고 아름다운 문장들.",
+        detail: "작품 속에 등장하는 '혼'의 의미와 상처를 치유하는 과정에 대해 토론해보고 싶습니다.",
+        author: "지은",
+        createdAt: "2026-08-04T14:20:00.000Z",
+        reactions: { like: 4, heart: 3 },
+        comments: [
+          { id: "c1", author: "민우", text: "읽는 동안 마음이 많이 아팠지만 꼭 읽어야 할 작품이었어.", createdAt: "2026-08-04T15:00:00.000Z" },
+          { id: "c2", author: "수현", text: "나도 이번 주말 독서 모임 전에 꼭 다 읽고 갈게!", createdAt: "2026-08-04T16:30:00.000Z" }
+        ]
+      },
+      {
+        id: "movie_1",
+        type: "movie",
+        title: "인사이드 아웃 2",
+        subTitle: "캘시 만 감독 · 2024년 개봉",
+        coverUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&auto=format&fit=crop&q=80",
+        rating: 4.5,
+        oneLiner: "사춘기의 불안함마저 나 자신의 소중한 일부임을 따뜻하게 안아준다.",
+        detail: "'불안이' 캐릭터가 폭주할 때 청소년기 내 모습이 생각나서 뭉클했음. 모임 친구들과 함께 보기 좋은 영화!",
+        author: "민우",
+        createdAt: "2026-08-05T09:10:00.000Z",
+        reactions: { like: 6, heart: 4 },
+        comments: [
+          { id: "c3", author: "태호", text: "불안이 표정 연기 미쳤음 ㅋㅋㅋ 내 최애 캐릭터 등극!", createdAt: "2026-08-05T10:12:00.000Z" }
+        ]
+      },
+      {
+        id: "book_2",
+        type: "book",
+        title: "불편한 편의점",
+        subTitle: "김호연 저 · 나무옆의자",
+        coverUrl: "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&auto=format&fit=crop&q=80",
+        rating: 4.8,
+        oneLiner: "청파동 골목길 편의점에서 느껴지는 따뜻한 온기와 이웃들의 소소한 삶.",
+        detail: "가볍게 읽기 시작했다가 마음이 잔잔해지는 위로를 받았습니다.",
+        author: "수현",
+        createdAt: "2026-08-06T11:00:00.000Z",
+        reactions: { like: 3, heart: 2 },
+        comments: []
+      }
+    ];
+
+    window.onload = function() {
+      initApp();
+    };
+
+    async function initApp() {
+      loadSavedReviews();
+      renderUserDropdown();
+      updateQuickTags();
+      renderFeed();
+      updateStats();
+
+      // Initial Firebase Realtime Cloud Setup
+      await initFirebaseCloud();
+
+      // Initial background query
+      handleSearchQuery("소년이 온다");
+    }
+
+    async function initFirebaseCloud() {
+      const cloudStatusText = document.getElementById('cloud-status-text');
+      const cloudStatusIndicator = document.getElementById('cloud-status-indicator');
+
+      try {
+        let rawConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : localStorage.getItem('culture_log_firebase_config');
+        if (!rawConfig) {
+          if (cloudStatusText) cloudStatusText.textContent = "로컬 DB (클라우드 DB 연동 설정 가능)";
+          return;
+        }
+
+        const configObj = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
+        const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore, collection, onSnapshot } = window.FirebaseSDK;
+
+        const app = initializeApp(configObj);
+        auth = getAuth(app);
+        db = getFirestore(app);
+
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          const userCred = await signInWithCustomToken(auth, __initial_auth_token);
+          currentUser = userCred.user;
+        } else {
+          const userCred = await signInAnonymously(auth);
+          currentUser = userCred.user;
+        }
+
+        isFirebaseConnected = true;
+        if (cloudStatusText) cloudStatusText.textContent = "🟢 Firebase 실시간 클라우드 DB 연결됨";
+        if (cloudStatusIndicator) cloudStatusIndicator.className = "text-xs text-emerald-400 flex items-center gap-1.5 font-bold";
+
+        // Setup Firestore listener (Rule 1: /artifacts/{appId}/public/data/reviews)
+        const reviewsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'reviews');
+        
+        onSnapshot(reviewsCollection, (snapshot) => {
+          const cloudReviews = [];
+          snapshot.forEach(docSnap => {
+            cloudReviews.push({ ...docSnap.data(), id: docSnap.id });
+          });
+
+          if (cloudReviews.length > 0) {
+            state.reviews = cloudReviews;
+            saveReviewsToStorage(false); // Update local cache
+            renderFeed();
+            updateStats();
+          }
+        }, (err) => {
+          console.warn("Firestore subscription error:", err);
+        });
+
+      } catch (err) {
+        console.warn("Firebase Init fallback to LocalStorage:", err);
+        if (cloudStatusText) cloudStatusText.textContent = "로컬 DB 사용 중 (설정에서 연동 가능)";
+      }
+    }
+
+    function openFirebaseConfigModal() {
+      const saved = localStorage.getItem('culture_log_firebase_config') || '';
+      document.getElementById('firebase-config-input').value = saved;
+      document.getElementById('firebase-modal').classList.remove('hidden');
+    }
+
+    function closeFirebaseConfigModal() {
+      document.getElementById('firebase-modal').classList.add('hidden');
+    }
+
+    function saveCustomFirebaseConfig(e) {
+      e.preventDefault();
+      const val = document.getElementById('firebase-config-input').value.trim();
+      if (!val) {
+        localStorage.removeItem('culture_log_firebase_config');
+        showToast("Firebase 설정이 삭제되었습니다. 로컬 저장소 모드로 동작합니다.");
+        closeFirebaseConfigModal();
+        return;
+      }
+
+      try {
+        JSON.parse(val);
+        localStorage.setItem('culture_log_firebase_config', val);
+        closeFirebaseConfigModal();
+        showToast("Firebase 설정이 저장되었습니다! 페이지를 새로고침하여 연결합니다.");
+        setTimeout(() => location.reload(), 1000);
+      } catch (err) {
+        showToast("올바른 JSON 형식의 Firebase Config를 입력해주세요.");
+      }
+    }
+
+    function loadSavedReviews() {
+      const stored = localStorage.getItem('culture_log_reviews');
+      if (stored) {
+        try {
+          state.reviews = JSON.parse(stored);
+        } catch (e) {
+          state.reviews = INITIAL_SEED_REVIEWS;
+        }
+      } else {
+        state.reviews = INITIAL_SEED_REVIEWS;
+        saveReviewsToStorage(true);
+      }
+
+      const storedFriends = localStorage.getItem('culture_log_friends');
+      if (storedFriends) {
+        try {
+          state.friends = JSON.parse(storedFriends);
+        } catch (e) {}
+      }
+    }
+
+    async function syncReviewToCloud(reviewObj) {
+      if (!isFirebaseConnected || !db || !currentUser) return;
+      try {
+        const { setDoc, doc } = window.FirebaseSDK;
+        const reviewRef = doc(db, 'artifacts', appId, 'public', 'data', 'reviews', reviewObj.id);
+        await setDoc(reviewRef, reviewObj);
+      } catch (err) {
+        console.error("Firestore sync error:", err);
+      }
+    }
+
+    function saveReviewsToStorage(shouldSyncCloud = true) {
+      localStorage.setItem('culture_log_reviews', JSON.stringify(state.reviews));
+      localStorage.setItem('culture_log_friends', JSON.stringify(state.friends));
+    }
+
+    // Switch Main Tabs
+    function switchTab(tabName) {
+      state.currentTab = tabName;
+
+      document.getElementById('tab-search').classList.add('hidden');
+      document.getElementById('tab-feed').classList.add('hidden');
+      document.getElementById('tab-stats').classList.add('hidden');
+
+      document.querySelectorAll('.nav-tab').forEach(el => {
+        el.className = "nav-tab flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition text-slate-300 hover:text-white hover:bg-slate-800";
+      });
+
+      const targetTab = document.getElementById(`tab-${tabName}`);
+      if (targetTab) targetTab.classList.remove('hidden');
+
+      const activeNav = document.getElementById(`nav-tab-${tabName}`);
+      if (activeNav) {
+        activeNav.className = "nav-tab active flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition text-indigo-400 bg-indigo-500/10 border border-indigo-500/20";
+      }
+
+      if (tabName === 'feed') {
+        renderFeed();
+      } else if (tabName === 'stats') {
+        updateStats();
+      }
+    }
+
+    function setViewMode(mode) {
+      state.viewMode = mode;
+      const gridBtn = document.getElementById('view-mode-grid');
+      const feedBtn = document.getElementById('view-mode-feed');
+
+      if (mode === 'grid') {
+        gridBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold transition bg-indigo-600 text-white shadow";
+        feedBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white";
+      } else {
+        feedBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold transition bg-indigo-600 text-white shadow";
+        gridBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white";
+      }
+
+      renderFeed();
+    }
+
+    function setSearchType(type) {
+      state.searchType = type;
+      
+      const bookBtn = document.getElementById('search-type-book');
+      const movieBtn = document.getElementById('search-type-movie');
+      const resultsIcon = document.getElementById('search-results-icon');
+
+      if (type === 'book') {
+        bookBtn.className = "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition bg-amber-500 text-slate-950 shadow-md";
+        movieBtn.className = "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition text-slate-400 hover:text-white";
+        document.getElementById('search-input').placeholder = "책 제목, 저자, 출판사를 입력하세요...";
+        resultsIcon.className = "fa-solid fa-book text-amber-500";
+      } else {
+        movieBtn.className = "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition bg-rose-600 text-white shadow-md";
+        bookBtn.className = "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition text-slate-400 hover:text-white";
+        document.getElementById('search-input').placeholder = "영화 제목 또는 감독 이름을 입력하세요...";
+        resultsIcon.className = "fa-solid fa-film text-rose-500";
+      }
+
+      updateQuickTags();
+      const currentQuery = document.getElementById('search-input').value.trim();
+      handleSearchQuery(currentQuery || HOT_KEYWORDS[type][0]);
+    }
+
+    function updateQuickTags() {
+      const container = document.getElementById('quick-tags-container');
+      const keywords = HOT_KEYWORDS[state.searchType];
+      
+      container.innerHTML = keywords.map(kw => `
+        <button onclick="fillAndSearch('${kw}')" class="px-2.5 py-1 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-medium transition">
+          # ${kw}
+        </button>
+      `).join('');
+    }
+
+    function fillAndSearch(kw) {
+      document.getElementById('search-input').value = kw;
+      document.getElementById('btn-clear-search').classList.remove('hidden');
+      handleSearchQuery(kw);
+    }
+
+    function clearSearchInput() {
+      document.getElementById('search-input').value = '';
+      document.getElementById('btn-clear-search').classList.add('hidden');
+    }
+
+    function handleSearch(e) {
+      e.preventDefault();
+      const query = document.getElementById('search-input').value.trim();
+      if (query) handleSearchQuery(query);
+    }
+
+    async function handleSearchQuery(query) {
+      const grid = document.getElementById('search-results-grid');
+      const countTag = document.getElementById('search-count-tag');
+      const clearBtn = document.getElementById('btn-clear-search');
+      
+      clearBtn.classList.remove('hidden');
+
+      grid.innerHTML = Array(6).fill(0).map(() => `
+        <div class="glass-card rounded-2xl p-3 border border-slate-800 animate-pulse space-y-3">
+          <div class="w-full aspect-[2/3] bg-slate-800 rounded-xl"></div>
+          <div class="h-4 bg-slate-800 rounded w-3/4"></div>
+          <div class="h-3 bg-slate-800 rounded w-1/2"></div>
+        </div>
+      `).join('');
+
+      countTag.textContent = `'${query}' 검색 중...`;
+
+      try {
+        if (state.searchType === 'book') {
+          await searchKakaoBooks(query);
+        } else {
+          await searchTMDBMovies(query);
+        }
+      } catch (err) {
+        console.warn("API Request fallback:", err);
+        renderFallbackResults(query);
+      }
+    }
+
+    // Kakao Book Search API
+    async function searchKakaoBooks(query) {
+      const url = `https://dapi.kakao.com/v3/search/book?query=${encodeURIComponent(query)}&size=12`;
+      const response = await fetch(url, {
+        headers: { 'Authorization': `KakaoAK ${KAKAO_API_KEY}` }
+      });
+
+      if (!response.ok) throw new Error(`Kakao API HTTP status ${response.status}`);
+      const data = await response.json();
+      
+      if (data.documents && data.documents.length > 0) {
+        renderBookResults(data.documents);
+      } else {
+        renderEmptyResults(query);
+      }
+    }
+
+    // TMDB Movie Search API
+    async function searchTMDBMovies(query) {
+      const url = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&language=ko-KR&query=${encodeURIComponent(query)}&page=1`;
+      const response = await fetch(url);
+      
+      if (!response.ok) throw new Error(`TMDB API HTTP status ${response.status}`);
+      const data = await response.json();
+
+      if (data.results && data.results.length > 0) {
+        renderMovieResults(data.results);
+      } else {
+        renderEmptyResults(query);
+      }
+    }
+
+    function renderBookResults(books) {
+      const grid = document.getElementById('search-results-grid');
+      document.getElementById('search-count-tag').textContent = `총 ${books.length}개 검색됨`;
+
+      grid.innerHTML = books.map(book => {
+        const cover = book.thumbnail || 'https://placehold.co/300x420/1e293b/94a3b8?text=No+Cover';
+        const authors = book.authors ? book.authors.join(', ') : '작자 미상';
+        const publisher = book.publisher || '';
+        const rawJson = escapeHtml(JSON.stringify({
+          type: 'book',
+          title: book.title,
+          subTitle: `${authors} · ${publisher}`,
+          coverUrl: cover,
+          desc: book.contents || '줄거리 정보가 제공되지 않습니다.'
+        }));
+
+        return `
+          <div class="glass-card rounded-2xl p-3 border border-slate-800 hover:border-amber-500/50 transition duration-200 flex flex-col justify-between group">
+            <div>
+              <div class="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 mb-2.5">
+                <img src="${cover}" alt="${escapeHtml(book.title)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" onerror="this.src='https://placehold.co/300x420/1e293b/94a3b8?text=No+Cover'">
+                <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500 text-slate-950 shadow">
+                  📚 도서
+                </span>
+              </div>
+              <h4 class="text-xs font-bold text-white line-clamp-1 group-hover:text-amber-400 transition" title="${escapeHtml(book.title)}">
+                ${escapeHtml(book.title)}
+              </h4>
+              <p class="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                ${escapeHtml(authors)}
+              </p>
+            </div>
+
+            <button onclick="openReviewModalFromRaw('${rawJson}')" class="mt-3 w-full py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 text-xs font-bold transition border border-amber-500/20 flex items-center justify-center gap-1">
+              <i class="fa-solid fa-star text-[10px]"></i> 감상평 남기기
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderMovieResults(movies) {
+      const grid = document.getElementById('search-results-grid');
+      document.getElementById('search-count-tag').textContent = `총 ${movies.length}개 검색됨`;
+
+      grid.innerHTML = movies.map(movie => {
+        const cover = movie.poster_path 
+          ? `https://image.tmdb.org/t300_and_h450_bestv2${movie.poster_path}`
+          : 'https://placehold.co/300x420/1e293b/94a3b8?text=No+Poster';
+        
+        const year = movie.release_date ? movie.release_date.split('-')[0] : '연도 미상';
+        const rating = movie.vote_average ? (movie.vote_average / 2).toFixed(1) : '평점 없음';
+        
+        const rawJson = escapeHtml(JSON.stringify({
+          type: 'movie',
+          title: movie.title,
+          subTitle: `개봉: ${year}년 · TMDB ⭐ ${rating}`,
+          coverUrl: cover,
+          desc: movie.overview || '상세 줄거리 정보가 제공되지 않습니다.'
+        }));
+
+        return `
+          <div class="glass-card rounded-2xl p-3 border border-slate-800 hover:border-rose-500/50 transition duration-200 flex flex-col justify-between group">
+            <div>
+              <div class="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 mb-2.5">
+                <img src="${cover}" alt="${escapeHtml(movie.title)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" onerror="this.src='https://placehold.co/300x420/1e293b/94a3b8?text=No+Poster'">
+                <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-600 text-white shadow">
+                  🎬 영화
+                </span>
+                <span class="absolute bottom-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-950/80 text-amber-400 backdrop-blur">
+                  ★ ${rating}
+                </span>
+              </div>
+              <h4 class="text-xs font-bold text-white line-clamp-1 group-hover:text-rose-400 transition" title="${escapeHtml(movie.title)}">
+                ${escapeHtml(movie.title)}
+              </h4>
+              <p class="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                ${year}년 개봉
+              </p>
+            </div>
+
+            <button onclick="openReviewModalFromRaw('${rawJson}')" class="mt-3 w-full py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white text-xs font-bold transition border border-rose-500/20 flex items-center justify-center gap-1">
+              <i class="fa-solid fa-star text-[10px]"></i> 감상평 남기기
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderFallbackResults(query) {
+      const isBook = state.searchType === 'book';
+      const mockItems = isBook ? [
+        {
+          type: 'book',
+          title: query + " (도서 데이터)",
+          subTitle: "작가 저 · 출판사",
+          coverUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&auto=format&fit=crop&q=80",
+          desc: "깊은 여운과 통찰을 전달하는 감동적인 도서입니다."
+        }
+      ] : [
+        {
+          type: 'movie',
+          title: query + " (영화 데이터)",
+          subTitle: "2024년 개봉 · TMDB ⭐ 4.5",
+          coverUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&auto=format&fit=crop&q=80",
+          desc: "짜임새 있는 연출과 화려한 스토리가 인상적인 영화 작품입니다."
+        }
+      ];
+
+      if (isBook) renderBookResults(mockItems);
+      else renderMovieResults(mockItems);
+    }
+
+    function renderEmptyResults(query) {
+      const grid = document.getElementById('search-results-grid');
+      grid.innerHTML = `
+        <div class="col-span-full py-12 text-center text-slate-400">
+          <i class="fa-solid fa-circle-exclamation text-3xl text-slate-600 mb-2"></i>
+          <p class="text-sm font-bold text-slate-300">'${escapeHtml(query)}'에 대한 검색 결과가 없습니다.</p>
+          <p class="text-xs text-slate-500 mt-1">철자를 확인하시거나 다른 주요 키워드로 검색해보세요.</p>
+        </div>
+      `;
+    }
+
+    function renderUserDropdown() {
+      const container = document.getElementById('user-list-container');
+      const feedUserFilter = document.getElementById('feed-filter-user');
+
+      container.innerHTML = state.friends.map(friend => `
+        <button onclick="setActiveUser('${friend}')" class="w-full text-left px-3 py-1.5 hover:bg-slate-800 flex items-center justify-between text-xs transition ${friend === state.activeUser ? 'text-indigo-400 font-bold bg-indigo-500/10' : 'text-slate-300'}">
+          <div class="flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[10px] text-white font-bold">${friend[0]}</span>
+            <span>${friend}</span>
+          </div>
+          ${friend === state.activeUser ? '<i class="fa-solid fa-check text-[10px]"></i>' : ''}
+        </button>
+      `).join('');
+
+      feedUserFilter.innerHTML = '<option value="all">모든 작성자</option>' + 
+        state.friends.map(f => `<option value="${f}">${f}</option>`).join('');
+
+      document.getElementById('current-user-name').textContent = state.activeUser;
+      document.getElementById('current-user-avatar').textContent = state.activeUser[0];
+    }
+
+    function toggleUserMenu() {
+      document.getElementById('user-dropdown').classList.toggle('hidden');
+    }
+
+    function setActiveUser(name) {
+      state.activeUser = name;
+      renderUserDropdown();
+      toggleUserMenu();
+      showToast(`작성자 계정이 '${name}'(으)로 설정되었습니다.`);
+    }
+
+    function promptAddFriend() {
+      const name = prompt("새로운 친구의 이름을 입력하세요:");
+      if (name && name.trim()) {
+        const cleanName = name.trim();
+        if (!state.friends.includes(cleanName)) {
+          state.friends.push(cleanName);
+          state.activeUser = cleanName;
+          saveReviewsToStorage();
+          renderUserDropdown();
+          showToast(`새 친구 '${cleanName}'(이)가 추가되었습니다.`);
+        }
+      }
+    }
+
+    function openReviewModalFromRaw(escapedJsonStr) {
+      const item = JSON.parse(unescapeHtml(escapedJsonStr));
+      state.activeSearchItem = item;
+
+      const categoryBadge = document.getElementById('modal-category-badge');
+      if (item.type === 'book') {
+        categoryBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-slate-950";
+        categoryBadge.textContent = "📚 도서";
+      } else {
+        categoryBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white";
+        categoryBadge.textContent = "🎬 영화";
+      }
+
+      document.getElementById('modal-item-title').textContent = item.title;
+      document.getElementById('modal-item-sub').textContent = item.subTitle;
+      document.getElementById('modal-item-desc').textContent = item.desc;
+      document.getElementById('modal-item-cover').src = item.coverUrl;
+      document.getElementById('modal-author-name').textContent = `${state.activeUser} (현재 선택된 계정)`;
+
+      document.getElementById('review-one-liner').value = '';
+      document.getElementById('review-detail').value = '';
+      setRating(5);
+
+      document.getElementById('review-modal').classList.remove('hidden');
+    }
+
+    function closeReviewModal() {
+      document.getElementById('review-modal').classList.add('hidden');
+    }
+
+    function setRating(rating) {
+      state.selectedRating = rating;
+      document.getElementById('selected-rating-text').textContent = `(${rating}.0 / 5.0)`;
+      
+      const stars = document.getElementById('star-rating-picker').querySelectorAll('button');
+      stars.forEach((btn, idx) => {
+        if (idx < rating) {
+          btn.className = "star-btn text-2xl text-amber-400";
+          btn.innerHTML = '<i class="fa-solid fa-star"></i>';
+        } else {
+          btn.className = "star-btn text-2xl text-slate-600 hover:text-amber-300";
+          btn.innerHTML = '<i class="fa-regular fa-star"></i>';
+        }
+      });
+    }
+
+    async function saveReview(e) {
+      e.preventDefault();
+      if (!state.activeSearchItem) return;
+
+      const oneLiner = document.getElementById('review-one-liner').value.trim();
+      const detail = document.getElementById('review-detail').value.trim();
+
+      if (!oneLiner) {
+        showToast("한줄평을 작성해주세요!");
+        return;
+      }
+
+      const newReview = {
+        id: 'review_' + Date.now(),
+        type: state.activeSearchItem.type,
+        title: state.activeSearchItem.title,
+        subTitle: state.activeSearchItem.subTitle,
+        coverUrl: state.activeSearchItem.coverUrl,
+        rating: state.selectedRating,
+        oneLiner: oneLiner,
+        detail: detail,
+        author: state.activeUser,
+        createdAt: new Date().toISOString(),
+        reactions: { like: 0, heart: 0 },
+        comments: []
+      };
+
+      state.reviews.unshift(newReview);
+      saveReviewsToStorage();
+      await syncReviewToCloud(newReview);
+
+      closeReviewModal();
+      showToast("새 감상평과 한줄평이 피드 및 실시간 클라우드에 등록되었습니다!");
+      switchTab('feed');
+    }
+
+    function renderFeed() {
+      const container = document.getElementById('culture-log-container');
+      const filterType = document.getElementById('feed-filter-type').value;
+      const filterUser = document.getElementById('feed-filter-user').value;
+      const sortBy = document.getElementById('feed-sort').value;
+
+      let filtered = state.reviews.filter(item => {
+        if (filterType !== 'all' && item.type !== filterType) return false;
+        if (filterUser !== 'all' && item.author !== filterUser) return false;
+        return true;
+      });
+
+      filtered.sort((a, b) => {
+        if (sortBy === 'latest') return new Date(b.createdAt) - new Date(a.createdAt);
+        if (sortBy === 'highest') return b.rating - a.rating;
+        if (sortBy === 'lowest') return a.rating - b.rating;
+        if (sortBy === 'comments') return (b.comments ? b.comments.length : 0) - (a.comments ? a.comments.length : 0);
+        return 0;
+      });
+
+      document.getElementById('feed-count-badge').textContent = state.reviews.length;
+
+      // Update Hero Banner with Top Rated / Recent Post
+      if (state.reviews.length > 0) {
+        const topItem = state.reviews[0];
+        document.getElementById('hero-title').textContent = `"${topItem.oneLiner}"`;
+        document.getElementById('hero-sub').textContent = `${topItem.title} · ${topItem.subTitle}`;
+        document.getElementById('hero-author').textContent = `${topItem.author} 님 작성`;
+        document.getElementById('hero-meta').querySelector('.text-amber-400').innerHTML = `<i class="fa-solid fa-star"></i> ${topItem.rating.toFixed(1)}`;
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="glass-card rounded-3xl p-12 text-center text-slate-500 border border-slate-800">
+            <i class="fa-solid fa-folder-open text-4xl mb-3 text-slate-600"></i>
+            <p class="text-base font-bold text-slate-300">등록된 문화 기록이 없습니다.</p>
+            <p class="text-xs text-slate-500 mt-1">상단 검색 탭에서 도서나 영화를 검색해 새로운 평점과 한줄평을 등록해보세요!</p>
+          </div>
+        `;
+        return;
+      }
+
+      if (state.viewMode === 'grid') {
+        renderGridMode(container, filtered);
+      } else {
+        renderFeedTimelineMode(container, filtered);
+      }
+    }
+
+    // Grid Poster Mode
+    function renderGridMode(container, items) {
+      container.className = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6";
+      
+      container.innerHTML = items.map(item => {
+        const isBook = item.type === 'book';
+        const commentCount = item.comments ? item.comments.length : 0;
+
+        return `
+          <div onclick="openPostDetailModal('${item.id}')" class="glass-card rounded-2xl p-3 border border-slate-800 hover:border-indigo-500/50 transition duration-300 cursor-pointer flex flex-col justify-between group poster-glow">
+            <div>
+              <div class="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 mb-3">
+                <img src="${item.coverUrl}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold ${isBook ? 'bg-amber-500 text-slate-950' : 'bg-rose-600 text-white'} shadow">
+                  ${isBook ? '📚 도서' : '🎬 영화'}
+                </span>
+                <span class="absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-950/85 text-amber-400 backdrop-blur">
+                  ★ ${item.rating.toFixed(1)}
+                </span>
+              </div>
+              
+              <h4 class="text-xs font-bold text-white line-clamp-1 group-hover:text-indigo-400 transition" title="${escapeHtml(item.title)}">
+                ${escapeHtml(item.title)}
+              </h4>
+              <p class="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                ${escapeHtml(item.author)} 님
+              </p>
+              
+              <p class="text-xs text-slate-300 italic line-clamp-2 mt-2 leading-relaxed bg-slate-950/60 p-2 rounded-xl border border-slate-800">
+                "${escapeHtml(item.oneLiner)}"
+              </p>
+            </div>
+
+            <div class="flex items-center justify-between text-[11px] text-slate-400 mt-3 pt-2 border-t border-slate-800/80">
+              <span class="flex items-center gap-1 text-indigo-400">
+                <i class="fa-regular fa-comment"></i> ${commentCount}
+              </span>
+              <span class="text-slate-500">${new Date(item.createdAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Timeline Feed Mode
+    function renderFeedTimelineMode(container, items) {
+      container.className = "space-y-6";
+
+      container.innerHTML = items.map(item => {
+        const isBook = item.type === 'book';
+        const formattedDate = new Date(item.createdAt).toLocaleDateString('ko-KR', {
+          year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+
+        const starFull = Math.floor(item.rating);
+        const hasHalf = item.rating % 1 !== 0;
+        let starsHtml = '';
+        for (let i = 0; i < starFull; i++) starsHtml += '<i class="fa-solid fa-star text-amber-400"></i>';
+        if (hasHalf) starsHtml += '<i class="fa-solid fa-star-half-stroke text-amber-400"></i>';
+        for (let i = (starFull + (hasHalf ? 1 : 0)); i < 5; i++) starsHtml += '<i class="fa-regular fa-star text-slate-600"></i>';
+
+        const commentsList = item.comments || [];
+
+        return `
+          <article class="glass-card rounded-3xl p-5 sm:p-6 border border-slate-800 space-y-4 shadow-xl">
+            
+            <!-- Author Header -->
+            <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-600 to-rose-500 text-white flex items-center justify-center font-bold text-sm shadow">
+                  ${escapeHtml(item.author[0])}
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm text-white">${escapeHtml(item.author)}</span>
+                    <span class="text-[11px] text-slate-400">님의 감상 노트</span>
+                  </div>
+                  <span class="text-[10px] text-slate-500">${formattedDate}</span>
+                </div>
+              </div>
+
+              <span class="px-2.5 py-1 rounded-full text-xs font-bold ${isBook ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}">
+                ${isBook ? '📚 도서' : '🎬 영화'}
+              </span>
+            </div>
+
+            <!-- Content Details -->
+            <div class="flex flex-col sm:flex-row gap-4">
+              <img src="${item.coverUrl}" alt="${escapeHtml(item.title)}" class="w-24 h-34 object-cover rounded-2xl border border-slate-800 shrink-0 shadow-md bg-slate-900 cursor-pointer" onclick="openPostDetailModal('${item.id}')">
+              
+              <div class="flex-1 min-w-0 space-y-2">
+                <div>
+                  <h3 onclick="openPostDetailModal('${item.id}')" class="text-base font-extrabold text-white tracking-tight hover:text-indigo-400 transition cursor-pointer">${escapeHtml(item.title)}</h3>
+                  <p class="text-xs text-slate-400">${escapeHtml(item.subTitle)}</p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <div class="flex items-center text-xs space-x-0.5">${starsHtml}</div>
+                  <span class="text-xs font-bold text-amber-400">${item.rating.toFixed(1)}</span>
+                </div>
+
+                <div class="p-3 rounded-2xl bg-slate-950/80 border-l-4 ${isBook ? 'border-amber-500' : 'border-rose-500'} text-xs text-slate-200 font-medium leading-relaxed italic">
+                  "${escapeHtml(item.oneLiner)}"
+                </div>
+
+                ${item.detail ? `<p class="text-xs text-slate-300 leading-relaxed whitespace-pre-line">${escapeHtml(item.detail)}</p>` : ''}
+              </div>
+            </div>
+
+            <!-- Reaction & Comment Controls -->
+            <div class="pt-3 border-t border-slate-800 space-y-3">
+              <div class="flex items-center justify-between text-xs text-slate-400">
+                <div class="flex items-center gap-2">
+                  <button onclick="toggleReaction('${item.id}', 'like')" class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition flex items-center gap-1.5 font-medium">
+                    <i class="fa-regular fa-thumbs-up text-indigo-400"></i>
+                    <span>공감</span>
+                    <span class="font-bold text-indigo-400">${item.reactions ? item.reactions.like || 0 : 0}</span>
+                  </button>
+                  <button onclick="toggleReaction('${item.id}', 'heart')" class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition flex items-center gap-1.5 font-medium">
+                    <i class="fa-regular fa-heart text-rose-400"></i>
+                    <span>최고</span>
+                    <span class="font-bold text-rose-400">${item.reactions ? item.reactions.heart || 0 : 0}</span>
+                  </button>
+                </div>
+
+                <button onclick="openPostDetailModal('${item.id}')" class="text-xs text-indigo-400 hover:underline flex items-center gap-1 font-semibold">
+                  <i class="fa-regular fa-comment"></i> 댓글 ${commentsList.length}개 보기 <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                </button>
+              </div>
+
+              <!-- Inline Quick Comment Form -->
+              <form onsubmit="handleAddComment(event, '${item.id}')" class="flex gap-2 pt-1">
+                <input type="text" placeholder="${state.activeUser}(으)로 댓글 남기기..." required class="flex-1 bg-slate-950 border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-slate-500">
+                <button type="submit" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white font-bold text-xs transition border border-slate-700 shrink-0">
+                  등록
+                </button>
+              </form>
+            </div>
+
+          </article>
+        `;
+      }).join('');
+    }
+
+    function openPostDetailModal(reviewId) {
+      const item = state.reviews.find(r => r.id === reviewId);
+      if (!reviewId || !item) return;
+
+      const isBook = item.type === 'book';
+      const formattedDate = new Date(item.createdAt).toLocaleDateString('ko-KR', {
+        year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+
+      // Render Header Info
+      document.getElementById('detail-header-info').innerHTML = `
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${isBook ? 'bg-amber-500 text-slate-950' : 'bg-rose-600 text-white'}">
+          ${isBook ? '📚 도서' : '🎬 영화'}
+        </span>
+        <div>
+          <h3 class="text-sm font-bold text-white truncate max-w-xs sm:max-w-md">${escapeHtml(item.title)}</h3>
+          <p class="text-[11px] text-slate-400">${escapeHtml(item.author)} 님의 감상 노트 · ${formattedDate}</p>
+        </div>
+      `;
+
+      // Comments Thread HTML
+      const commentsList = item.comments || [];
+      const commentsHtml = commentsList.map(c => {
+        const cDate = new Date(c.createdAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return `
+          <div class="flex items-start gap-3 text-xs bg-slate-950 p-3 rounded-2xl border border-slate-800">
+            <div class="w-7 h-7 rounded-full bg-indigo-600/80 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+              ${escapeHtml(c.author[0])}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-bold text-slate-200">${escapeHtml(c.author)}</span>
+                <span class="text-[10px] text-slate-500">${cDate}</span>
+              </div>
+              <p class="text-slate-300 mt-1 leading-relaxed">${escapeHtml(c.text)}</p>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('detail-modal-body').innerHTML = `
+        <div class="flex flex-col sm:flex-row gap-5">
+          <img src="${item.coverUrl}" alt="${escapeHtml(item.title)}" class="w-32 h-44 object-cover rounded-2xl border border-slate-800 shrink-0 shadow-lg bg-slate-900 mx-auto sm:mx-0">
+          <div class="flex-1 space-y-3">
+            <div>
+              <h2 class="text-lg font-extrabold text-white">${escapeHtml(item.title)}</h2>
+              <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(item.subTitle)}</p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <span class="text-amber-400 font-extrabold text-base">★ ${item.rating.toFixed(1)}</span>
+              <span class="text-xs text-slate-500">/ 5.0</span>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-slate-950 border-l-4 ${isBook ? 'border-amber-500' : 'border-rose-500'} text-xs text-slate-200 font-medium italic leading-relaxed">
+              "${escapeHtml(item.oneLiner)}"
+            </div>
+
+            ${item.detail ? `<p class="text-xs text-slate-300 leading-relaxed whitespace-pre-line bg-slate-950/60 p-3 rounded-2xl border border-slate-800/60">${escapeHtml(item.detail)}</p>` : ''}
+          </div>
+        </div>
+
+        <!-- Comments Section -->
+        <div class="pt-4 border-t border-slate-800 space-y-3">
+          <h4 class="text-xs font-bold text-slate-200 flex items-center justify-between">
+            <span><i class="fa-regular fa-comments text-indigo-400"></i> 친구들 댓글 토론 (${commentsList.length})</span>
+            <span class="text-[11px] text-slate-500">현재 작성자: ${state.activeUser}</span>
+          </h4>
+
+          <div class="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+            ${commentsList.length > 0 ? commentsHtml : '<p class="text-xs text-slate-500 text-center py-4">아직 작성된 댓글이 없습니다. 첫 댓글을 남겨보세요!</p>'}
+          </div>
+
+          <form onsubmit="handleAddComment(event, '${item.id}')" class="flex gap-2 pt-2">
+            <input type="text" placeholder="${state.activeUser}(으)로 댓글 작성..." required class="flex-1 bg-slate-950 border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow">
+              댓글 작성
+            </button>
+          </form>
+        </div>
+      `;
+
+      document.getElementById('post-detail-modal').classList.remove('hidden');
+    }
+
+    function closePostDetailModal() {
+      document.getElementById('post-detail-modal').classList.add('hidden');
+    }
+
+    async function handleAddComment(e, reviewId) {
+      e.preventDefault();
+      const input = e.target.querySelector('input');
+      const text = input.value.trim();
+
+      if (!text) return;
+
+      const review = state.reviews.find(r => r.id === reviewId);
+      if (review) {
+        if (!review.comments) review.comments = [];
+        
+        review.comments.push({
+          id: 'c_' + Date.now(),
+          author: state.activeUser,
+          text: text,
+          createdAt: new Date().toISOString()
+        });
+
+        saveReviewsToStorage();
+        await syncReviewToCloud(review);
+        renderFeed();
+        
+        // Refresh modal if open
+        const modal = document.getElementById('post-detail-modal');
+        if (!modal.classList.contains('hidden')) {
+          openPostDetailModal(reviewId);
+        }
+
+        showToast("새 댓글이 작성되었습니다!");
+      }
+    }
+
+    async function toggleReaction(reviewId, type) {
+      const review = state.reviews.find(r => r.id === reviewId);
+      if (review) {
+        if (!review.reactions) review.reactions = { like: 0, heart: 0 };
+        review.reactions[type] = (review.reactions[type] || 0) + 1;
+        saveReviewsToStorage();
+        await syncReviewToCloud(review);
+        renderFeed();
+      }
+    }
+
+    function updateStats() {
+      const total = state.reviews.length;
+      const books = state.reviews.filter(r => r.type === 'book').length;
+      const movies = state.reviews.filter(r => r.type === 'movie').length;
+      
+      let totalComments = 0;
+      state.reviews.forEach(r => {
+        if (r.comments) totalComments += r.comments.length;
+      });
+
+      document.getElementById('stat-total-reviews').textContent = total;
+      document.getElementById('stat-book-count').textContent = books;
+      document.getElementById('stat-movie-count').textContent = movies;
+      document.getElementById('stat-comment-count').textContent = totalComments;
+
+      const friendsListContainer = document.getElementById('friends-stats-list');
+      
+      friendsListContainer.innerHTML = state.friends.map(friend => {
+        const friendReviews = state.reviews.filter(r => r.author === friend);
+        const bookCnt = friendReviews.filter(r => r.type === 'book').length;
+        const movieCnt = friendReviews.filter(r => r.type === 'movie').length;
+
+        return `
+          <div class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900 border border-slate-800">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center">
+                ${escapeHtml(friend[0])}
+              </div>
+              <div>
+                <span class="text-xs font-bold text-white">${escapeHtml(friend)}</span>
+                <span class="text-[11px] text-slate-400 ml-2">총 ${friendReviews.length}개 기록</span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 text-xs text-slate-400">
+              <span class="px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-400 font-semibold">📚 책 ${bookCnt}</span>
+              <span class="px-2.5 py-0.5 rounded-lg bg-rose-500/10 text-rose-400 font-semibold">🎬 영화 ${movieCnt}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function resetToDemoData() {
+      state.reviews = INITIAL_SEED_REVIEWS;
+      saveReviewsToStorage();
+      renderFeed();
+      updateStats();
+      showToast("샘플 데이터로 초기화되었습니다.");
+    }
+
+    function exportDataJSON() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.reviews, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `culture_log_backup_${new Date().toISOString().slice(0,10)}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast("문화 클럽 데이터가 JSON 파일로 다운로드되었습니다.");
+    }
+
+    function showToast(message) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = "px-4 py-2.5 rounded-2xl bg-indigo-600 text-white text-xs font-bold shadow-2xl border border-indigo-400/30 animate-fade-in flex items-center gap-2 pointer-events-auto";
+      toast.innerHTML = `<i class="fa-solid fa-circle-check text-sm"></i> ${escapeHtml(message)}`;
+
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    function escapeHtml(str) {
+      if (typeof str !== 'string') return str;
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function unescapeHtml(str) {
+      if (typeof str !== 'string') return str;
+      return str.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#039;/g, "'");
+    }
+  </script>
+
+</body>
+</html>
