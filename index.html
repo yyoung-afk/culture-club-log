@@ -631,17 +631,61 @@
 
           if (cloudReviews.length > 0) {
             state.reviews = cloudReviews;
+
+            // 작성된 글에서 새로운 작성자 이름이 있으면 자동으로 친구 목록에 추가
+            let addedNewAuthor = false;
+            cloudReviews.forEach(r => {
+              if (r.author && r.author !== '민우' && !state.friends.includes(r.author)) {
+                state.friends.push(r.author);
+                addedNewAuthor = true;
+              }
+            });
+
             saveReviewsToStorage(false);
+            renderUserDropdown();
+
             if (state.currentTab === 'feed') renderFeed();
             if (state.currentTab === 'stats') updateStats();
+
+            if (addedNewAuthor) {
+              syncFriendsToCloud();
+            }
           }
         }, (err) => {
           console.warn("Firestore subscription warning:", err);
         });
 
+        // Firebase 클라우드에서 친구(작성자) 목록 실시간 수신
+        const friendsDoc = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('meta').doc('friends');
+        friendsDoc.onSnapshot((docSnap) => {
+          if (docSnap.exists) {
+            const cloudFriends = docSnap.data().list;
+            if (Array.isArray(cloudFriends) && cloudFriends.length > 0) {
+              const cleaned = cloudFriends.filter(f => f !== '민우');
+              cleaned.forEach(f => {
+                if (!state.friends.includes(f)) state.friends.push(f);
+              });
+              saveReviewsToStorage(false);
+              renderUserDropdown();
+              if (state.currentTab === 'stats') updateStats();
+            }
+          }
+        });
+
       } catch (err) {
         console.warn("Firebase Init fallback:", err);
         if (cloudStatusText) cloudStatusText.textContent = "로컬 저장소 동기화 중";
+      }
+    }
+
+    async function syncFriendsToCloud() {
+      if (!isFirebaseConnected || !db) return;
+      try {
+        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('meta').doc('friends').set({
+          list: state.friends
+        });
+      } catch (err) {
+        console.error("Firestore friends sync error:", err);
       }
     }
 
@@ -1136,6 +1180,7 @@
             state.friends.push(cleanName);
             state.activeUser = cleanName;
             saveReviewsToStorage();
+            syncFriendsToCloud();
             renderUserDropdown();
             updateStats();
             showToast(`새 친구 '${cleanName}'(이)가 추가되었습니다.`);
@@ -1164,6 +1209,7 @@
           state.friends = state.friends.filter(f => f !== friendName);
           if (state.activeUser === friendName) state.activeUser = '지영';
           saveReviewsToStorage();
+          syncFriendsToCloud();
           renderUserDropdown();
           updateStats();
           showToast(`멤버 '${friendName}'님이 삭제되었습니다.`);
