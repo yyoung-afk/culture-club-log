@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Culture Club - 우리들만의 책 & 영화 리뷰 라이브러리 🦭</title>
+  <title>Culture Club 🦭 - 우리들만의 책 & 영화 리뷰 라이브러리</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 
-  <!-- Firebase Compat SDKs (CDN) -->
+  <!-- Firebase Compat SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -85,7 +85,6 @@
 </head>
 <body class="h-full flex flex-col font-sans antialiased text-slate-100 bg-slate-950">
 
-  <!-- Top Navigation Header -->
   <header class="sticky top-0 z-40 glass-nav">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
@@ -97,7 +96,7 @@
           </div>
           <div>
             <h1 class="font-extrabold text-lg tracking-tight text-white flex items-center gap-2 font-outfit">
-              Culture Club
+              Culture Club 🦭
             </h1>
             <p class="text-[11px] text-slate-400 hidden sm:block">우리들만의 책 & 영화 리뷰 라이브러리 🦭</p>
           </div>
@@ -119,7 +118,6 @@
 
         <!-- Right Controls: Backup Button & Member Switcher -->
         <div class="flex items-center gap-2.5">
-          <!-- Backup JSON Download Button -->
           <button onclick="exportDataJSON()" title="전체 리뷰 데이터를 JSON 파일로 다운로드합니다." class="px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
             <i class="fa-solid fa-download text-indigo-400 text-[11px]"></i>
             <span class="hidden sm:inline">백업 다운로드</span>
@@ -138,15 +136,12 @@
               <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 ml-1"></i>
             </div>
 
-            <!-- User Dropdown Menu -->
             <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-56 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl z-50 py-2 animate-fade-in">
               <div class="px-3.5 py-1.5 border-b border-slate-800">
                 <p class="text-[11px] font-medium text-slate-400">현재 활동할 작성자 선택</p>
                 <p id="author-delete-notice" class="text-[10px] text-indigo-400 mt-0.5">'지영' 계정 접속 시 멤버 삭제 가능</p>
               </div>
-              <div id="user-list-container" class="max-h-48 overflow-y-auto py-1">
-                <!-- Dynamically populated -->
-              </div>
+              <div id="user-list-container" class="max-h-48 overflow-y-auto py-1"></div>
               <div class="border-t border-slate-800 pt-1.5 px-2">
                 <button onclick="promptAddFriend()" class="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-indigo-400 hover:bg-indigo-500/10 flex items-center gap-2 transition">
                   <i class="fa-solid fa-user-plus text-[10px]"></i> 새 친구 등록하기
@@ -159,7 +154,7 @@
       </div>
     </div>
 
-    <!-- Mobile Bottom Navigation Bar -->
+    <!-- Mobile Navigation Bar -->
     <div class="md:hidden border-t border-slate-800 bg-slate-900/95 flex justify-around py-2 px-1">
       <button onclick="switchTab('search')" id="mobile-nav-search" class="flex flex-col items-center gap-1 text-indigo-400 text-xs font-medium">
         <i class="fa-solid fa-magnifying-glass text-sm"></i>
@@ -176,19 +171,16 @@
     </div>
   </header>
 
-  <!-- Main Container -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
     <!-- TAB 1: INTEGRATED SEARCH VIEW -->
     <section id="tab-search" class="space-y-6 animate-fade-in">
-      
-      <!-- Integrated Search Banner -->
       <div class="glass-card rounded-3xl p-6 md:p-8 relative overflow-hidden border border-slate-800">
         <div class="absolute -right-12 -top-12 w-64 h-64 bg-gradient-to-br from-amber-500/15 via-rose-500/15 to-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
         
         <div class="max-w-3xl relative z-10">
           <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-semibold mb-3">
-            <i class="fa-solid fa-globe text-[11px]"></i> 책 & 영화통합 검색
+            <i class="fa-solid fa-globe text-[11px]"></i> 책 & 영화 통합 검색
           </span>
           <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             감상한 책이나 영화를 검색해보세요
@@ -197,7 +189,6 @@
             책 제목, 저자, 또는 영화 제목을 입력하면 Kakao Book 및 TMDB API에서 실시간으로 가져옵니다.
           </p>
 
-          <!-- Search Input Form -->
           <form onsubmit="handleSearch(event)" class="mt-6 flex items-center gap-2 max-w-2xl">
             <div class="relative flex-1">
               <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
@@ -211,19 +202,15 @@
             </button>
           </form>
 
-          <!-- Quick Recommendation Keywords -->
           <div class="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">
             <span class="font-semibold text-slate-400 flex items-center gap-1">
               <i class="fa-solid fa-fire text-rose-500 text-[11px]"></i> 추천 검색어:
             </span>
-            <div id="quick-tags-container" class="flex flex-wrap gap-1.5">
-              <!-- Rendered dynamically -->
-            </div>
+            <div id="quick-tags-container" class="flex flex-wrap gap-1.5"></div>
           </div>
         </div>
       </div>
 
-      <!-- Search Results Header -->
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <h3 class="text-base font-bold text-slate-200 flex items-center gap-2">
           <i id="search-results-icon" class="fa-solid fa-fire text-amber-500"></i>
@@ -236,17 +223,11 @@
         </div>
       </div>
 
-      <!-- Grid Container -->
-      <div id="search-results-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        <!-- Dynamically filled with popular contents or search results -->
-      </div>
-
+      <div id="search-results-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
     </section>
 
     <!-- TAB 2: CULTURE LOG FEED VIEW -->
     <section id="tab-feed" class="hidden space-y-6">
-
-      <!-- Hero Banner Highlight -->
       <div id="hero-banner-container" class="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-indigo-950/60 p-6 md:p-8 shadow-2xl">
         <div class="absolute right-0 top-0 bottom-0 w-1/2 opacity-20 pointer-events-none bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-500 via-rose-500 to-transparent"></div>
         
@@ -274,10 +255,7 @@
         </div>
       </div>
 
-      <!-- Filter Bar & Display Switcher -->
       <div class="glass-card rounded-2xl p-4 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        
-        <!-- Filters -->
         <div class="flex flex-wrap items-center gap-2.5">
           <select id="feed-filter-type" onchange="renderFeed()" class="bg-slate-900 border border-slate-700/80 text-xs font-medium text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500">
             <option value="all">전체 (책 + 영화)</option>
@@ -287,7 +265,6 @@
 
           <select id="feed-filter-user" onchange="renderFeed()" class="bg-slate-900 border border-slate-700/80 text-xs font-medium text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500">
             <option value="all">모든 작성자</option>
-            <!-- Rendered dynamically -->
           </select>
 
           <select id="feed-sort" onchange="renderFeed()" class="bg-slate-900 border border-slate-700/80 text-xs font-medium text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500">
@@ -297,7 +274,6 @@
           </select>
         </div>
 
-        <!-- View Mode Switcher -->
         <div class="flex items-center gap-2 border-t md:border-t-0 border-slate-800 pt-3 md:pt-0 justify-between md:justify-end">
           <span class="text-xs text-slate-400 font-medium">보기 방식:</span>
           <div class="inline-flex rounded-xl bg-slate-900 p-1 border border-slate-800">
@@ -309,22 +285,14 @@
             </button>
           </div>
         </div>
-
       </div>
 
-      <!-- Feed Container -->
-      <div id="culture-log-container">
-        <!-- Rendered dynamically -->
-      </div>
-
+      <div id="culture-log-container"></div>
     </section>
 
     <!-- TAB 3: CLUB STATS & MEMBERS DASHBOARD -->
     <section id="tab-stats" class="hidden space-y-6">
-      
-      <!-- Analytics Stat Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
         <div class="glass-card rounded-2xl p-5 border border-slate-800">
           <div class="flex items-center justify-between">
             <span class="text-xs font-medium text-slate-400">총 기록된 문화 콘텐츠</span>
@@ -376,10 +344,8 @@
             <span class="text-xs text-slate-400 ml-1">개</span>
           </div>
         </div>
-
       </div>
 
-      <!-- Members Leaderboard -->
       <div class="glass-card rounded-2xl p-6 border border-slate-800">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
@@ -387,27 +353,22 @@
               <i class="fa-solid fa-users text-indigo-400"></i>
               모임 친구 목록 및 활동 현황
             </h3>
-            <p class="text-xs text-slate-400 mt-1">친구 카드를 클릭하면 작성한 감상평만 피드에서 바로 모아봅니다.</p>
+            <p class="text-xs text-slate-400 mt-1">친구 이름을 클릭하면 해당 친구의 감상평만 피드에서 바로 모아봅니다.</p>
           </div>
           <button onclick="promptAddFriend()" class="self-start sm:self-auto px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow">
             <i class="fa-solid fa-user-plus text-[10px]"></i> 친구 추가
           </button>
         </div>
 
-        <div id="friends-stats-list" class="space-y-3">
-          <!-- Dynamically populated -->
-        </div>
+        <div id="friends-stats-list" class="space-y-3"></div>
       </div>
-
     </section>
 
   </main>
 
-  <!-- MODAL: WRITE REVIEW & ONE-LINER -->
-  <div id="review-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+  <!-- MODAL: WRITE / EDIT REVIEW -->
+  <div id="review-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
     <div class="relative w-full max-w-xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden my-8 animate-fade-in">
-      
-      <!-- Modal Header -->
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
         <div class="flex items-center gap-2.5">
           <span id="modal-category-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-slate-950">📚 책</span>
@@ -418,10 +379,7 @@
         </button>
       </div>
 
-      <!-- Modal Body -->
       <form onsubmit="saveReview(event)" class="p-6 space-y-5">
-        
-        <!-- Target Content Preview Card -->
         <div class="flex gap-4 p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
           <img id="modal-item-cover" src="" alt="Cover" class="w-16 h-22 object-cover rounded-xl border border-slate-800 shrink-0 bg-slate-900">
           <div class="flex-1 min-w-0">
@@ -431,21 +389,17 @@
           </div>
         </div>
 
-        <!-- 0.5 Step Star Rating Picker -->
         <div>
           <label class="block text-xs font-bold text-slate-300 mb-2">
             평점 선택 <span class="text-amber-400 font-extrabold" id="selected-rating-text">(5.0 / 5.0)</span>
             <span class="text-[11px] text-slate-400 font-normal ml-1">(별의 왼쪽/오른쪽 클릭으로 0.5점/1점 조절)</span>
           </label>
           <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
-            <div class="flex items-center space-x-2" id="star-rating-picker-stars">
-              <!-- Dynamically rendered interactive half-stars -->
-            </div>
+            <div class="flex items-center space-x-2" id="star-rating-picker-stars"></div>
             <span class="text-xl font-extrabold text-amber-400 font-outfit" id="star-rating-picker-num">5.0</span>
           </div>
         </div>
 
-        <!-- One-line Review -->
         <div>
           <label class="block text-xs font-bold text-slate-300 mb-1">
             한줄평 <span class="text-rose-400">*</span> (작품을 요약하는 인상 깊은 한 문장)
@@ -453,7 +407,6 @@
           <input type="text" id="review-one-liner" required placeholder="예: '마음이 따뜻해지는 감동적인 명작!'" class="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 placeholder-slate-500">
         </div>
 
-        <!-- Detailed Review -->
         <div>
           <label class="block text-xs font-bold text-slate-300 mb-1">
             상세 감상평 & 모임 토론 주제 (선택)
@@ -461,22 +414,19 @@
           <textarea id="review-detail" rows="3" placeholder="친구들과 모임에서 이야기 나누고 싶은 인상 깊은 장면이나 질문을 적어보세요..." class="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 placeholder-slate-500"></textarea>
         </div>
 
-        <!-- Current Active User -->
         <div class="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800">
           <span>작성자: <strong id="modal-author-name" class="text-indigo-400">지영</strong></span>
           <span class="text-[11px] text-slate-500">등록 즉시 전체 모임 피드에 반영됩니다.</span>
         </div>
 
-        <!-- Submit Buttons -->
         <div class="flex items-center justify-end gap-3 pt-2">
           <button type="button" onclick="closeReviewModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 transition">
             취소
           </button>
-          <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center gap-2">
+          <button type="submit" id="modal-submit-btn" class="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center gap-2">
             <i class="fa-solid fa-paper-plane text-xs"></i> 감상평 남기기
           </button>
         </div>
-
       </form>
     </div>
   </div>
@@ -484,27 +434,18 @@
   <!-- MODAL: POST DETAIL & INDIVIDUAL REVIEWS THREAD -->
   <div id="post-detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
     <div class="relative w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden my-8 animate-fade-in">
-      
-      <!-- Detail Header -->
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
-        <div class="flex items-center gap-3" id="detail-header-info">
-          <!-- Populated dynamically -->
-        </div>
+        <div class="flex items-center gap-3" id="detail-header-info"></div>
         <button onclick="closePostDetailModal()" class="text-slate-400 hover:text-white p-1 transition">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
-
-      <!-- Detail Body -->
-      <div id="detail-modal-body" class="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-        <!-- Populated dynamically -->
-      </div>
-
+      <div id="detail-modal-body" class="p-6 space-y-6 max-h-[75vh] overflow-y-auto"></div>
     </div>
   </div>
 
   <!-- CUSTOM CONFIRMATION MODAL -->
-  <div id="custom-confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+  <div id="custom-confirm-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
     <div class="relative w-full max-w-sm bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in text-center">
       <div class="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center mx-auto text-xl">
         <i class="fa-solid fa-triangle-exclamation"></i>
@@ -524,12 +465,12 @@
     </div>
   </div>
 
-  <!-- CUSTOM INPUT MODAL (Friend Add) -->
-  <div id="custom-input-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+  <!-- CUSTOM INPUT MODAL -->
+  <div id="custom-input-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
     <div class="relative w-full max-w-sm bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <h3 id="input-modal-title" class="text-sm font-bold text-white flex items-center gap-2">
-          <i class="fa-solid fa-user-plus text-indigo-400"></i> 친구 등록
+          <i class="fa-solid fa-pen-to-square text-indigo-400"></i> 입력
         </h3>
         <button onclick="closeInputModal()" class="text-slate-400 hover:text-white transition p-1">
           <i class="fa-solid fa-xmark text-sm"></i>
@@ -537,153 +478,24 @@
       </div>
       <form onsubmit="handleInputAction(event)" class="space-y-4">
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1.5">이름 입력</label>
-          <input type="text" id="input-modal-value" required placeholder="이름을 입력하세요..." class="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <label class="block text-xs font-medium text-slate-300 mb-1.5">내용 입력</label>
+          <input type="text" id="input-modal-value" required class="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
         <div class="flex items-center justify-end gap-2 pt-1">
           <button type="button" onclick="closeInputModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 transition">
             취소
           </button>
           <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition shadow">
-            등록하기
+            확인
           </button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Toast Container -->
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
   <script>
-    /* ==========================================================================
-       OPEN API KEYS, FIREBASE STATE & GLOBAL APP LOGIC
-       ========================================================================== */
-    let confirmCallback = null;
-    let promptCallback = null;
-
-    function showConfirmModal(title, message, onConfirm) {
-      document.getElementById('confirm-modal-title').textContent = title;
-      document.getElementById('confirm-modal-message').textContent = message;
-      confirmCallback = onConfirm;
-      document.getElementById('custom-confirm-modal').classList.remove('hidden');
-    }
-
-    function closeConfirmModal() {
-      document.getElementById('custom-confirm-modal').classList.add('hidden');
-      confirmCallback = null;
-    }
-
-    function handleConfirmAction() {
-      if (confirmCallback) {
-        confirmCallback();
-      }
-      closeConfirmModal();
-    }
-
-    function showInputModal(title, placeholder, onSubmit) {
-      document.getElementById('input-modal-title').textContent = title;
-      const inputEl = document.getElementById('input-modal-value');
-      inputEl.placeholder = placeholder;
-      inputEl.value = '';
-      promptCallback = onSubmit;
-      document.getElementById('custom-input-modal').classList.remove('hidden');
-      setTimeout(() => inputEl.focus(), 100);
-    }
-
-    function closeInputModal() {
-      document.getElementById('custom-input-modal').classList.add('hidden');
-      promptCallback = null;
-    }
-
-    function handleInputAction(e) {
-      e.preventDefault();
-      const val = document.getElementById('input-modal-value').value.trim();
-      if (promptCallback && val) {
-        promptCallback(val);
-      }
-      closeInputModal();
-    }
-
-    function promptAddFriend() {
-      showInputModal(
-        "새 친구 등록하기",
-        "새로운 작성자(친구)의 이름을 입력하세요...",
-        (name) => {
-          const cleanName = name.trim();
-          if (cleanName === '민우') {
-            showToast("'민우'는 등록할 수 없는 이름입니다.");
-            return;
-          }
-          if (!state.friends.includes(cleanName)) {
-            state.friends.push(cleanName);
-            state.activeUser = cleanName;
-            saveReviewsToStorage();
-            renderUserDropdown();
-            updateStats();
-            showToast(`새 친구 '${cleanName}'(이)가 추가되었습니다.`);
-          } else {
-            showToast(`이미 '${cleanName}' 멤버가 존재합니다.`);
-          }
-        }
-      );
-    }
-
-    function promptDeleteFriend(e, friendName) {
-      if (e) e.stopPropagation();
-      if (state.activeUser !== '지영') {
-        showToast("작성자 삭제는 '지영' 계정으로 설정되었을 때만 가능합니다.");
-        return;
-      }
-      if (friendName === '지영') {
-        showToast("기본 관리자 '지영'은 삭제할 수 없습니다.");
-        return;
-      }
-
-      showConfirmModal(
-        "멤버 삭제",
-        `정말 멤버 '${friendName}'님을 삭제하시겠습니까?`,
-        () => {
-          state.friends = state.friends.filter(f => f !== friendName);
-          if (state.activeUser === friendName) state.activeUser = '지영';
-          saveReviewsToStorage();
-          renderUserDropdown();
-          updateStats();
-          showToast(`멤버 '${friendName}'님이 삭제되었습니다.`);
-        }
-      );
-    }
-
-    async function deleteReview(reviewId) {
-      const review = state.reviews.find(r => r.id === reviewId);
-      if (!review) return;
-
-      const canDelete = (state.activeUser === '지영' || state.activeUser === review.author);
-      if (!canDelete) {
-        showToast(`삭제 권한이 없습니다. (${review.author} 님 작성)`);
-        return;
-      }
-
-      showConfirmModal(
-        "감상평 삭제",
-        `"${review.title}" 감상평을 정말 삭제하시겠습니까?`,
-        async () => {
-          state.reviews = state.reviews.filter(r => r.id !== reviewId);
-          saveReviewsToStorage();
-          await deleteReviewFromCloud(reviewId);
-
-          const modal = document.getElementById('post-detail-modal');
-          if (!modal.classList.contains('hidden')) {
-            closePostDetailModal();
-          }
-
-          renderFeed();
-          updateStats();
-          showToast("감상평이 삭제되었습니다.");
-        }
-      );
-    }
-
     const KAKAO_API_KEY = "c983a472407e0547534b6b3cf1797603";
     const TMDB_API_KEY = "830703efc489053392e33acd6b820a1e";
     const DEFAULT_FIREBASE_CONFIG = {
@@ -700,15 +512,18 @@
     let db = null;
     let auth = null;
     let isFirebaseConnected = false;
+    let confirmCallback = null;
+    let promptCallback = null;
 
     let state = {
       currentTab: 'search',
       viewMode: 'grid',
       activeUser: '지영',
-      friends: ['지영'],
+      friends: ['지영', '수현'],
       selectedRating: 5.0,
       reviews: [],
-      activeSearchItem: null
+      activeSearchItem: null,
+      editingReviewId: null
     };
 
     const HOT_RECOMMEND_TAGS = ['소년이 온다', '인사이드 아웃 2', '불편한 편의점', '모순', '헤어질 결심', '파묘'];
@@ -730,6 +545,21 @@
         comments: [
           { id: "c1", author: "지영", text: "다시 읽어도 가슴이 뭉클하네요.", createdAt: "2026-08-04T15:00:00.000Z" }
         ]
+      },
+      {
+        id: "book_1_sub",
+        workKey: "book_소년이 온다",
+        type: "book",
+        title: "소년이 온다",
+        subTitle: "한강 저 · 창비",
+        coverUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&auto=format&fit=crop&q=80",
+        rating: 4.6,
+        oneLiner: "문장의 힘이 얼마나 거대한지 다시 한번 느끼게 해준 책.",
+        detail: "모임 때 다 같이 한 소절씩 나누어 낭독해보면 좋을 것 같아요.",
+        author: "수현",
+        createdAt: "2026-08-04T16:10:00.000Z",
+        reactions: { like: 2, heart: 2 },
+        comments: []
       },
       {
         id: "movie_1",
@@ -757,13 +587,8 @@
       renderUserDropdown();
       renderQuickTags();
       
-      // Default to Search Tab on start
       switchTab('search');
-
-      // Initial Firebase Realtime Cloud Setup
       await initFirebaseCloud();
-
-      // Load popular contents for initial state
       loadPopularContents();
     }
 
@@ -776,27 +601,23 @@
           throw new Error("Firebase SDK script not loaded yet");
         }
 
-        const configObj = DEFAULT_FIREBASE_CONFIG;
-        
         if (!firebase.apps.length) {
-          firebase.initializeApp(configObj);
+          firebase.initializeApp(DEFAULT_FIREBASE_CONFIG);
         }
 
         auth = firebase.auth();
         db = firebase.firestore();
 
-        // Try anonymous sign-in, but don't fail if anonymous auth is disabled on console
         try {
           await auth.signInAnonymously();
         } catch (authErr) {
-          console.warn("Anonymous auth warning (Firestore will attempt unauthenticated access):", authErr);
+          console.warn("Anonymous auth warning:", authErr);
         }
 
         isFirebaseConnected = true;
         if (cloudStatusText) cloudStatusText.textContent = "🟢 Firebase 실시간 클라우드 DB 연결됨";
         if (cloudStatusIndicator) cloudStatusIndicator.className = "text-xs text-emerald-400 flex items-center gap-1.5 font-bold";
 
-        // Firestore Realtime Listener
         const reviewsCollection = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews');
         
         reviewsCollection.onSnapshot((snapshot) => {
@@ -850,13 +671,13 @@
             const cleaned = parsed.filter(f => f !== '민우');
             state.friends = cleaned.includes('지영') ? cleaned : ['지영', ...cleaned];
           } else {
-            state.friends = ['지영'];
+            state.friends = ['지영', '수현'];
           }
         } catch (e) {
-          state.friends = ['지영'];
+          state.friends = ['지영', '수현'];
         }
       } else {
-        state.friends = ['지영'];
+        state.friends = ['지영', '수현'];
       }
 
       if (state.activeUser === '민우') {
@@ -887,7 +708,52 @@
       localStorage.setItem('culture_log_friends', JSON.stringify(state.friends));
     }
 
-    // Switch Main Tabs
+    function showConfirmModal(title, message, onConfirm) {
+      document.getElementById('confirm-modal-title').textContent = title;
+      document.getElementById('confirm-modal-message').textContent = message;
+      confirmCallback = onConfirm;
+      document.getElementById('custom-confirm-modal').classList.remove('hidden');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('custom-confirm-modal').classList.add('hidden');
+      confirmCallback = null;
+    }
+
+    function handleConfirmAction() {
+      if (confirmCallback) {
+        confirmCallback();
+      }
+      closeConfirmModal();
+    }
+
+    function showInputModal(title, placeholder, onSubmit, defaultValue = '') {
+      document.getElementById('input-modal-title').innerHTML = `<i class="fa-solid fa-pen-to-square text-indigo-400"></i> ${escapeHtml(title)}`;
+      const inputEl = document.getElementById('input-modal-value');
+      inputEl.placeholder = placeholder;
+      inputEl.value = defaultValue;
+      promptCallback = onSubmit;
+      document.getElementById('custom-input-modal').classList.remove('hidden');
+      setTimeout(() => {
+        inputEl.focus();
+        inputEl.select();
+      }, 100);
+    }
+
+    function closeInputModal() {
+      document.getElementById('custom-input-modal').classList.add('hidden');
+      promptCallback = null;
+    }
+
+    function handleInputAction(e) {
+      e.preventDefault();
+      const val = document.getElementById('input-modal-value').value.trim();
+      if (promptCallback && val) {
+        promptCallback(val);
+      }
+      closeInputModal();
+    }
+
     function switchTab(tabName) {
       state.currentTab = tabName;
 
@@ -1076,7 +942,6 @@
 
       let html = '';
 
-      // Render Books
       books.forEach(book => {
         const cover = book.thumbnail || 'https://placehold.co/300x420/1e293b/94a3b8?text=No+Cover';
         const authors = book.authors ? book.authors.join(', ') : '작자 미상';
@@ -1117,7 +982,6 @@
         `;
       });
 
-      // Render Movies
       movies.forEach(movie => {
         const cover = movie.poster_path 
           ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
@@ -1184,14 +1048,6 @@
           subTitle: "캘시 만 감독 · 2024년 개봉",
           coverUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&auto=format&fit=crop&q=80",
           desc: "사춘기의 불안함마저 나 자신의 소중한 일부임을 따뜻하게 안아준다."
-        },
-        {
-          workKey: "book_불편한 편의점",
-          type: 'book',
-          title: "불편한 편의점",
-          subTitle: "김호연 저 · 나무옆의자",
-          coverUrl: "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&auto=format&fit=crop&q=80",
-          desc: "청파동 골목길 편의점에서 느껴지는 따뜻한 온기와 이웃들의 소소한 삶."
         }
       ];
 
@@ -1267,26 +1123,31 @@
     }
 
     function promptAddFriend() {
-      const name = prompt("새로운 작성자(친구)의 이름을 입력하세요:");
-      if (name && name.trim()) {
-        const cleanName = name.trim();
-        if (cleanName === '민우') {
-          showToast("'민우'는 등록할 수 없는 이름입니다.");
-          return;
+      showInputModal(
+        "새 친구 등록하기",
+        "새로운 작성자(친구)의 이름을 입력하세요...",
+        (name) => {
+          const cleanName = name.trim();
+          if (cleanName === '민우') {
+            showToast("'민우'는 등록할 수 없는 이름입니다.");
+            return;
+          }
+          if (!state.friends.includes(cleanName)) {
+            state.friends.push(cleanName);
+            state.activeUser = cleanName;
+            saveReviewsToStorage();
+            renderUserDropdown();
+            updateStats();
+            showToast(`새 친구 '${cleanName}'(이)가 추가되었습니다.`);
+          } else {
+            showToast(`이미 '${cleanName}' 멤버가 존재합니다.`);
+          }
         }
-        if (!state.friends.includes(cleanName)) {
-          state.friends.push(cleanName);
-          state.activeUser = cleanName;
-          saveReviewsToStorage();
-          renderUserDropdown();
-          updateStats();
-          showToast(`새 친구 '${cleanName}'(이)가 추가되었습니다.`);
-        }
-      }
+      );
     }
 
     function promptDeleteFriend(e, friendName) {
-      e.stopPropagation();
+      if (e) e.stopPropagation();
       if (state.activeUser !== '지영') {
         showToast("작성자 삭제는 '지영' 계정으로 설정되었을 때만 가능합니다.");
         return;
@@ -1296,19 +1157,24 @@
         return;
       }
 
-      if (confirm(`정말 멤버 '${friendName}'님을 삭제하시겠습니까?`)) {
-        state.friends = state.friends.filter(f => f !== friendName);
-        if (state.activeUser === friendName) state.activeUser = '지영';
-        saveReviewsToStorage();
-        renderUserDropdown();
-        updateStats();
-        showToast(`멤버 '${friendName}'님이 삭제되었습니다.`);
-      }
+      showConfirmModal(
+        "멤버 삭제",
+        `정말 멤버 '${friendName}'님을 삭제하시겠습니까?`,
+        () => {
+          state.friends = state.friends.filter(f => f !== friendName);
+          if (state.activeUser === friendName) state.activeUser = '지영';
+          saveReviewsToStorage();
+          renderUserDropdown();
+          updateStats();
+          showToast(`멤버 '${friendName}'님이 삭제되었습니다.`);
+        }
+      );
     }
 
     function openReviewModalFromRaw(escapedJsonStr) {
       const item = JSON.parse(unescapeHtml(escapedJsonStr));
       state.activeSearchItem = item;
+      state.editingReviewId = null;
 
       const categoryBadge = document.getElementById('modal-category-badge');
       if (item.type === 'book') {
@@ -1324,10 +1190,54 @@
       document.getElementById('modal-item-desc').textContent = item.desc;
       document.getElementById('modal-item-cover').src = item.coverUrl;
       document.getElementById('modal-author-name').textContent = `${state.activeUser} (현재 선택됨)`;
+      document.getElementById('modal-submit-btn').innerHTML = `<i class="fa-solid fa-paper-plane text-xs"></i> 감상평 남기기`;
 
       document.getElementById('review-one-liner').value = '';
       document.getElementById('review-detail').value = '';
       setRating(5.0);
+
+      document.getElementById('review-modal').classList.remove('hidden');
+    }
+
+    function openEditReviewModal(reviewId) {
+      const review = state.reviews.find(r => r.id === reviewId);
+      if (!review) return;
+
+      const canEdit = (state.activeUser === '지영' || state.activeUser === review.author);
+      if (!canEdit) {
+        showToast(`수정 권한이 없습니다. (현재 작성자: '${state.activeUser}' / 작성자: '${review.author}')`);
+        return;
+      }
+
+      state.editingReviewId = reviewId;
+      state.activeSearchItem = {
+        workKey: review.workKey,
+        type: review.type,
+        title: review.title,
+        subTitle: review.subTitle,
+        coverUrl: review.coverUrl,
+        desc: review.detail || ''
+      };
+
+      const categoryBadge = document.getElementById('modal-category-badge');
+      if (review.type === 'book') {
+        categoryBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-slate-950";
+        categoryBadge.textContent = "📚 도서";
+      } else {
+        categoryBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white";
+        categoryBadge.textContent = "🎬 영화";
+      }
+
+      document.getElementById('modal-item-title').textContent = review.title;
+      document.getElementById('modal-item-sub').textContent = review.subTitle;
+      document.getElementById('modal-item-desc').textContent = review.detail || review.oneLiner;
+      document.getElementById('modal-item-cover').src = review.coverUrl;
+      document.getElementById('modal-author-name').textContent = `${review.author} (수정 중)`;
+      document.getElementById('modal-submit-btn').innerHTML = `<i class="fa-solid fa-pen-to-square text-xs"></i> 감상평 수정하기`;
+
+      document.getElementById('review-one-liner').value = review.oneLiner || '';
+      document.getElementById('review-detail').value = review.detail || '';
+      setRating(review.rating || 5.0);
 
       document.getElementById('review-modal').classList.remove('hidden');
     }
@@ -1378,31 +1288,52 @@
         return;
       }
 
-      const workKey = state.activeSearchItem.workKey || `${state.activeSearchItem.type}_${state.activeSearchItem.title.trim()}`;
+      if (state.editingReviewId) {
+        const targetReview = state.reviews.find(r => r.id === state.editingReviewId);
+        if (targetReview) {
+          targetReview.rating = state.selectedRating;
+          targetReview.oneLiner = oneLiner;
+          targetReview.detail = detail;
+          targetReview.updatedAt = new Date().toISOString();
 
-      const newReview = {
-        id: 'review_' + Date.now(),
-        workKey: workKey,
-        type: state.activeSearchItem.type,
-        title: state.activeSearchItem.title,
-        subTitle: state.activeSearchItem.subTitle,
-        coverUrl: state.activeSearchItem.coverUrl,
-        rating: state.selectedRating,
-        oneLiner: oneLiner,
-        detail: detail,
-        author: state.activeUser,
-        createdAt: new Date().toISOString(),
-        reactions: { like: 0, heart: 0 },
-        comments: []
-      };
+          saveReviewsToStorage();
+          await syncReviewToCloud(targetReview);
+          showToast("감상평이 성공적으로 수정되었습니다!");
+        }
+        state.editingReviewId = null;
+      } else {
+        const workKey = state.activeSearchItem.workKey || `${state.activeSearchItem.type}_${state.activeSearchItem.title.trim()}`;
 
-      state.reviews.unshift(newReview);
-      saveReviewsToStorage();
-      await syncReviewToCloud(newReview);
+        const newReview = {
+          id: 'review_' + Date.now(),
+          workKey: workKey,
+          type: state.activeSearchItem.type,
+          title: state.activeSearchItem.title,
+          subTitle: state.activeSearchItem.subTitle,
+          coverUrl: state.activeSearchItem.coverUrl,
+          rating: state.selectedRating,
+          oneLiner: oneLiner,
+          detail: detail,
+          author: state.activeUser,
+          createdAt: new Date().toISOString(),
+          reactions: { like: 0, heart: 0 },
+          comments: []
+        };
+
+        state.reviews.unshift(newReview);
+        saveReviewsToStorage();
+        await syncReviewToCloud(newReview);
+        showToast("새 감상평이 피드에 등록되었습니다!");
+      }
 
       closeReviewModal();
-      showToast("새 감상평이 피드에 등록되었습니다!");
-      switchTab('feed');
+      
+      const detailModal = document.getElementById('post-detail-modal');
+      if (!detailModal.classList.contains('hidden') && state.activeSearchItem) {
+        openGroupDetailModal(state.activeSearchItem.workKey || state.activeSearchItem.title);
+      } else {
+        renderFeed();
+      }
     }
 
     async function deleteReview(reviewId) {
@@ -1415,47 +1346,24 @@
         return;
       }
 
-      if (confirm(`"${review.title}" 감상평을 정말 삭제하시겠습니까?`)) {
-        state.reviews = state.reviews.filter(r => r.id !== reviewId);
-        saveReviewsToStorage();
-        await deleteReviewFromCloud(reviewId);
+      showConfirmModal(
+        "감상평 삭제",
+        `"${review.title}" 감상평을 정말 삭제하시겠습니까?`,
+        async () => {
+          state.reviews = state.reviews.filter(r => r.id !== reviewId);
+          saveReviewsToStorage();
+          await deleteReviewFromCloud(reviewId);
 
-        const modal = document.getElementById('post-detail-modal');
-        if (!modal.classList.contains('hidden')) {
-          closePostDetailModal();
+          const modal = document.getElementById('post-detail-modal');
+          if (!modal.classList.contains('hidden')) {
+            closePostDetailModal();
+          }
+
+          renderFeed();
+          updateStats();
+          showToast("감상평이 삭제되었습니다.");
         }
-
-        renderFeed();
-        updateStats();
-        showToast("감상평이 삭제되었습니다.");
-      }
-    }
-
-    function getGroupedReviews() {
-      const groups = {};
-      state.reviews.forEach(item => {
-        const key = item.workKey || `${item.type}_${item.title.trim()}`;
-        if (!groups[key]) {
-          groups[key] = {
-            workKey: key,
-            type: item.type,
-            title: item.title,
-            subTitle: item.subTitle,
-            coverUrl: item.coverUrl,
-            items: []
-          };
-        }
-        groups[key].items.push(item);
-      });
-
-      const groupedList = Object.values(groups).map(g => {
-        const sum = g.items.reduce((acc, curr) => acc + curr.rating, 0);
-        g.avgRating = sum / g.items.length;
-        g.latestCreatedAt = g.items.reduce((max, curr) => new Date(curr.createdAt) > new Date(max) ? curr.createdAt : max, g.items[0].createdAt);
-        return g;
-      });
-
-      return groupedList;
+      );
     }
 
     function renderFeed() {
@@ -1464,7 +1372,7 @@
       const filterUser = document.getElementById('feed-filter-user').value;
       const sortBy = document.getElementById('feed-sort').value;
 
-      let filteredReviews = state.reviews.filter(item => {
+      let filtered = state.reviews.filter(item => {
         if (filterType !== 'all' && item.type !== filterType) return false;
         if (filterUser !== 'all' && item.author !== filterUser) return false;
         return true;
@@ -1476,11 +1384,12 @@
         const topItem = state.reviews[0];
         document.getElementById('hero-title').textContent = `"${topItem.oneLiner}"`;
         document.getElementById('hero-sub').textContent = `${topItem.title} · ${topItem.subTitle}`;
-        document.getElementById('hero-author').textContent = `${topItem.author} 님 작성`;
+        document.getElementById('hero-author').textContent = `${topItem.author} 님`;
         document.getElementById('hero-meta').querySelector('.text-amber-400').innerHTML = `<i class="fa-solid fa-star"></i> ${topItem.rating.toFixed(1)}`;
       }
 
-      if (filteredReviews.length === 0) {
+      if (filtered.length === 0) {
+        container.className = "block";
         container.innerHTML = `
           <div class="glass-card rounded-3xl p-12 text-center text-slate-500 border border-slate-800">
             <i class="fa-solid fa-folder-open text-4xl mb-3 text-slate-600"></i>
@@ -1491,223 +1400,172 @@
         return;
       }
 
+      const groupsMap = {};
+      filtered.forEach(item => {
+        const key = item.workKey || `${item.type}_${item.title.trim()}`;
+        if (!groupsMap[key]) {
+          groupsMap[key] = {
+            workKey: key,
+            type: item.type,
+            title: item.title,
+            subTitle: item.subTitle,
+            coverUrl: item.coverUrl,
+            reviews: []
+          };
+        }
+        groupsMap[key].reviews.push(item);
+      });
+
+      const groupedList = Object.values(groupsMap);
+
+      groupedList.forEach(grp => {
+        const totalRating = grp.reviews.reduce((sum, r) => sum + r.rating, 0);
+        grp.avgRating = totalRating / grp.reviews.length;
+        grp.latestDate = new Date(Math.max(...grp.reviews.map(r => new Date(r.createdAt))));
+      });
+
+      if (sortBy === 'latest') groupedList.sort((a, b) => b.latestDate - a.latestDate);
+      else if (sortBy === 'highest') groupedList.sort((a, b) => b.avgRating - a.avgRating);
+      else if (sortBy === 'lowest') groupedList.sort((a, b) => a.avgRating - b.avgRating);
+
       if (state.viewMode === 'grid') {
-        renderGridMode(container, filteredReviews, sortBy);
+        renderGridModeGrouped(container, groupedList);
       } else {
-        renderFeedTimelineMode(container, filteredReviews, sortBy);
+        renderFeedTimelineModeGrouped(container, groupedList);
       }
     }
 
-    function renderGridMode(container, rawReviews, sortBy) {
+    function renderGridModeGrouped(container, groups) {
       container.className = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6";
-      
-      const workMap = {};
-      rawReviews.forEach(item => {
-        const key = item.workKey || `${item.type}_${item.title.trim()}`;
-        if (!workMap[key]) workMap[key] = [];
-        workMap[key].push(item);
-      });
 
-      const groupedList = Object.keys(workMap).map(key => {
-        const items = workMap[key];
-        const sum = items.reduce((acc, curr) => acc + curr.rating, 0);
-        return {
-          workKey: key,
-          type: items[0].type,
-          title: items[0].title,
-          subTitle: items[0].subTitle,
-          coverUrl: items[0].coverUrl,
-          avgRating: sum / items.length,
-          count: items.length,
-          latestItem: items[0],
-          items: items
-        };
-      });
-
-      groupedList.sort((a, b) => {
-        if (sortBy === 'latest') return new Date(b.latestItem.createdAt) - new Date(a.latestItem.createdAt);
-        if (sortBy === 'highest') return b.avgRating - a.avgRating;
-        if (sortBy === 'lowest') return a.avgRating - b.avgRating;
-        return 0;
-      });
-
-      container.innerHTML = groupedList.map(group => {
-        const isBook = group.type === 'book';
-        const authorsList = group.items.map(i => i.author).join(', ');
+      container.innerHTML = groups.map(grp => {
+        const isBook = grp.type === 'book';
+        const authorsList = Array.from(new Set(grp.reviews.map(r => r.author))).join(', ');
+        const latestReview = grp.reviews[0];
 
         return `
-          <div onclick="openGroupDetailModal('${escapeHtml(group.workKey)}')" class="glass-card rounded-2xl p-3 border border-slate-800 hover:border-indigo-500/50 transition duration-300 cursor-pointer flex flex-col justify-between group poster-glow">
+          <div onclick="openGroupDetailModal('${escapeHtml(grp.workKey)}')" class="glass-card rounded-2xl p-3 border border-slate-800 hover:border-indigo-500/50 transition duration-300 cursor-pointer flex flex-col justify-between group poster-glow">
             <div>
               <div class="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 mb-3">
-                <img src="${group.coverUrl}" alt="${escapeHtml(group.title)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                <img src="${grp.coverUrl}" alt="${escapeHtml(grp.title)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
                 <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold ${isBook ? 'bg-amber-500 text-slate-950' : 'bg-rose-600 text-white'} shadow">
                   ${isBook ? '📚 도서' : '🎬 영화'}
                 </span>
-                <span class="absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-950/85 text-amber-400 backdrop-blur border border-amber-500/30">
-                  ★ ${group.avgRating.toFixed(1)} <span class="text-[9px] text-slate-300 font-normal">(${group.count}명)</span>
+                <span class="absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-950/85 text-amber-400 backdrop-blur">
+                  ★ ${grp.avgRating.toFixed(1)} (${grp.reviews.length}명)
                 </span>
               </div>
               
-              <h4 class="text-xs font-bold text-white line-clamp-1 group-hover:text-indigo-400 transition" title="${escapeHtml(group.title)}">
-                ${escapeHtml(group.title)}
+              <h4 class="text-xs font-bold text-white line-clamp-1 group-hover:text-indigo-400 transition" title="${escapeHtml(grp.title)}">
+                ${escapeHtml(grp.title)}
               </h4>
               <p class="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
-                작성: ${escapeHtml(authorsList)}
+                ${escapeHtml(authorsList)} 님 작성
               </p>
               
               <p class="text-xs text-slate-300 italic line-clamp-2 mt-2 leading-relaxed bg-slate-950/60 p-2 rounded-xl border border-slate-800">
-                "${escapeHtml(group.latestItem.oneLiner)}"
+                "${escapeHtml(latestReview.oneLiner)}"
               </p>
             </div>
 
             <div class="flex items-center justify-between text-[11px] text-slate-400 mt-3 pt-2 border-t border-slate-800/80">
-              <span class="text-indigo-400 font-semibold flex items-center gap-1">
-                <i class="fa-solid fa-users text-[10px]"></i> ${group.count}개의 리뷰
-              </span>
-              <span class="text-slate-500">${new Date(group.latestItem.createdAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
+              <span class="text-indigo-400 font-semibold">리뷰 ${grp.reviews.length}개</span>
+              <span class="text-slate-500">${grp.latestDate.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
             </div>
           </div>
         `;
       }).join('');
     }
 
-    function renderFeedTimelineMode(container, rawReviews, sortBy) {
+    function renderFeedTimelineModeGrouped(container, groups) {
       container.className = "space-y-6";
 
-      const reviewsCopy = [...rawReviews];
-      reviewsCopy.sort((a, b) => {
-        if (sortBy === 'latest') return new Date(b.createdAt) - new Date(a.createdAt);
-        if (sortBy === 'highest') return b.rating - a.rating;
-        if (sortBy === 'lowest') return a.rating - b.rating;
-        return 0;
-      });
+      container.innerHTML = groups.map(grp => {
+        const isBook = grp.type === 'book';
+        const reviewsHtml = grp.reviews.map(item => {
+          const itemDate = new Date(item.createdAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+          const canDelete = (state.activeUser === '지영' || state.activeUser === item.author);
 
-      container.innerHTML = reviewsCopy.map(item => {
-        const isBook = item.type === 'book';
-        const formattedDate = new Date(item.createdAt).toLocaleDateString('ko-KR', {
-          year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-        });
+          return `
+            <div class="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div class="flex items-center gap-2">
+                  <div class="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center">
+                    ${escapeHtml(item.author[0])}
+                  </div>
+                  <div>
+                    <span class="text-xs font-bold text-white">${escapeHtml(item.author)}</span>
+                    <span class="text-[10px] text-slate-500 ml-1.5">${itemDate}</span>
+                  </div>
+                </div>
 
-        const starFull = Math.floor(item.rating);
-        const hasHalf = item.rating % 1 !== 0;
-        let starsHtml = '';
-        for (let i = 0; i < starFull; i++) starsHtml += '<i class="fa-solid fa-star text-amber-400"></i>';
-        if (hasHalf) starsHtml += '<i class="fa-solid fa-star-half-stroke text-amber-400"></i>';
-        for (let i = (starFull + (hasHalf ? 1 : 0)); i < 5; i++) starsHtml += '<i class="fa-regular fa-star text-slate-600"></i>';
+                <div class="flex items-center gap-2">
+                  <span class="text-amber-400 font-extrabold text-sm">★ ${item.rating.toFixed(1)}</span>
+                  ${canDelete ? `
+                    <button onclick="openEditReviewModal('${item.id}')" class="text-slate-500 hover:text-indigo-400 text-xs p-1" title="감상평 수정">
+                      <i class="fa-solid fa-pen-to-square"></i>
+                    </button>
+                    <button onclick="deleteReview('${item.id}')" class="text-slate-500 hover:text-rose-400 text-xs p-1" title="감상평 삭제">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
 
-        const commentsList = item.comments || [];
-        const isJiyoungOrAuthor = (state.activeUser === '지영' || state.activeUser === item.author);
+              <div class="p-2.5 rounded-xl bg-slate-900 border-l-2 ${isBook ? 'border-amber-500' : 'border-rose-500'} text-xs text-slate-200 font-medium italic">
+                "${escapeHtml(item.oneLiner)}"
+              </div>
+
+              ${item.detail ? `<p class="text-xs text-slate-300 leading-relaxed whitespace-pre-line">${escapeHtml(item.detail)}</p>` : ''}
+            </div>
+          `;
+        }).join('');
 
         return `
           <article class="glass-card rounded-3xl p-5 sm:p-6 border border-slate-800 space-y-4 shadow-xl">
-            
-            <!-- Author Header -->
             <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
               <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-600 to-rose-500 text-white flex items-center justify-center font-bold text-sm shadow">
-                  ${escapeHtml(item.author[0])}
-                </div>
+                <img src="${grp.coverUrl}" alt="${escapeHtml(grp.title)}" class="w-12 h-16 object-cover rounded-xl border border-slate-800">
                 <div>
-                  <div class="flex items-center gap-2">
-                    <span class="font-bold text-sm text-white">${escapeHtml(item.author)}</span>
-                    <span class="text-[11px] text-slate-400">님의 감상 노트</span>
-                  </div>
-                  <span class="text-[10px] text-slate-500">${formattedDate}</span>
+                  <h3 onclick="openGroupDetailModal('${escapeHtml(grp.workKey)}')" class="text-base font-extrabold text-white tracking-tight hover:text-indigo-400 transition cursor-pointer">${escapeHtml(grp.title)}</h3>
+                  <p class="text-xs text-slate-400">${escapeHtml(grp.subTitle)}</p>
                 </div>
               </div>
 
-              <div class="flex items-center gap-2">
+              <div class="text-right">
                 <span class="px-2.5 py-1 rounded-full text-xs font-bold ${isBook ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}">
-                  ${isBook ? '📚 도서' : '🎬 영화'}
+                  ★ 평균 ${grp.avgRating.toFixed(1)}점 (${grp.reviews.length}명 참여)
                 </span>
-                ${isJiyoungOrAuthor ? `
-                  <button onclick="deleteReview('${item.id}')" class="text-slate-500 hover:text-rose-400 p-1.5 transition text-xs" title="감상평 삭제">
-                    <i class="fa-solid fa-trash"></i>
-                  </button>
-                ` : ''}
               </div>
             </div>
 
-            <!-- Content Details -->
-            <div class="flex flex-col sm:flex-row gap-4">
-              <img src="${item.coverUrl}" alt="${escapeHtml(item.title)}" class="w-24 h-34 object-cover rounded-2xl border border-slate-800 shrink-0 shadow-md bg-slate-900 cursor-pointer" onclick="openGroupDetailModal('${escapeHtml(item.workKey || item.title)}')">
-              
-              <div class="flex-1 min-w-0 space-y-2">
-                <div>
-                  <h3 onclick="openGroupDetailModal('${escapeHtml(item.workKey || item.title)}')" class="text-base font-extrabold text-white tracking-tight hover:text-indigo-400 transition cursor-pointer">${escapeHtml(item.title)}</h3>
-                  <p class="text-xs text-slate-400">${escapeHtml(item.subTitle)}</p>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <div class="flex items-center text-xs space-x-0.5">${starsHtml}</div>
-                  <span class="text-xs font-bold text-amber-400">${item.rating.toFixed(1)}</span>
-                </div>
-
-                <div class="p-3 rounded-2xl bg-slate-950/80 border-l-4 ${isBook ? 'border-amber-500' : 'border-rose-500'} text-xs text-slate-200 font-medium leading-relaxed italic">
-                  "${escapeHtml(item.oneLiner)}"
-                </div>
-
-                ${item.detail ? `<p class="text-xs text-slate-300 leading-relaxed whitespace-pre-line">${escapeHtml(item.detail)}</p>` : ''}
-              </div>
+            <div class="space-y-3">
+              ${reviewsHtml}
             </div>
-
-            <!-- Reaction & Comments -->
-            <div class="pt-3 border-t border-slate-800 space-y-3">
-              <div class="flex items-center justify-between text-xs text-slate-400">
-                <div class="flex items-center gap-2">
-                  <button onclick="toggleReaction('${item.id}', 'like')" class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition flex items-center gap-1.5 font-medium">
-                    <i class="fa-regular fa-thumbs-up text-indigo-400"></i>
-                    <span>공감</span>
-                    <span class="font-bold text-indigo-400">${item.reactions ? item.reactions.like || 0 : 0}</span>
-                  </button>
-                  <button onclick="toggleReaction('${item.id}', 'heart')" class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition flex items-center gap-1.5 font-medium">
-                    <i class="fa-regular fa-heart text-rose-400"></i>
-                    <span>최고</span>
-                    <span class="font-bold text-rose-400">${item.reactions ? item.reactions.heart || 0 : 0}</span>
-                  </button>
-                </div>
-
-                <button onclick="openGroupDetailModal('${escapeHtml(item.workKey || item.title)}')" class="text-xs text-indigo-400 hover:underline flex items-center gap-1 font-semibold">
-                  <i class="fa-regular fa-comment"></i> 전체 친구 평점 & 댓글 (${commentsList.length}) <i class="fa-solid fa-chevron-right text-[10px]"></i>
-                </button>
-              </div>
-
-              <!-- Quick Comment Input -->
-              <form onsubmit="handleAddComment(event, '${item.id}')" class="flex gap-2 pt-1">
-                <input type="text" placeholder="${state.activeUser}(으)로 댓글 남기기..." required class="flex-1 bg-slate-950 border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-slate-500">
-                <button type="submit" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white font-bold text-xs transition border border-slate-700 shrink-0">
-                  등록
-                </button>
-              </form>
-            </div>
-
           </article>
         `;
       }).join('');
     }
 
     function openGroupDetailModal(workKey) {
-      const relatedReviews = state.reviews.filter(r => (r.workKey === workKey || r.title === workKey));
-      if (relatedReviews.length === 0) return;
+      const matchingReviews = state.reviews.filter(r => (r.workKey || `${r.type}_${r.title.trim()}`) === workKey || r.title === workKey);
+      if (matchingReviews.length === 0) return;
 
-      const firstItem = relatedReviews[0];
-      const isBook = firstItem.type === 'book';
-      const sum = relatedReviews.reduce((acc, curr) => acc + curr.rating, 0);
-      const avgRating = sum / relatedReviews.length;
+      const first = matchingReviews[0];
+      const isBook = first.type === 'book';
+      const avgRating = (matchingReviews.reduce((sum, r) => sum + r.rating, 0) / matchingReviews.length).toFixed(1);
 
-      // Header Info
       document.getElementById('detail-header-info').innerHTML = `
         <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${isBook ? 'bg-amber-500 text-slate-950' : 'bg-rose-600 text-white'}">
           ${isBook ? '📚 도서' : '🎬 영화'}
         </span>
         <div>
-          <h3 class="text-sm font-bold text-white truncate max-w-xs sm:max-w-md">${escapeHtml(firstItem.title)}</h3>
-          <p class="text-[11px] text-slate-400">${relatedReviews.length}명의 모임 친구 참여</p>
+          <h3 class="text-sm font-bold text-white truncate max-w-xs sm:max-w-md">${escapeHtml(first.title)}</h3>
+          <p class="text-[11px] text-slate-400">평균 ★ ${avgRating} / 총 ${matchingReviews.length}명 리뷰</p>
         </div>
       `;
 
-      // Render Individual Friend Reviews
-      const friendReviewsHtml = relatedReviews.map(item => {
+      const reviewsListHtml = matchingReviews.map(item => {
         const itemDate = new Date(item.createdAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         const commentsList = item.comments || [];
         const canDelete = (state.activeUser === '지영' || state.activeUser === item.author);
@@ -1726,6 +1584,9 @@
                   <div class="flex items-center gap-1.5">
                     <span class="text-[10px] text-slate-500">${cDate}</span>
                     ${canDeleteComment ? `
+                      <button onclick="editComment('${item.id}', '${c.id}')" class="text-slate-600 hover:text-indigo-400 text-[10px]" title="댓글 수정">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                      </button>
                       <button onclick="deleteComment('${item.id}', '${c.id}')" class="text-slate-600 hover:text-rose-400 text-[10px]" title="댓글 삭제">
                         <i class="fa-solid fa-xmark"></i>
                       </button>
@@ -1754,6 +1615,9 @@
               <div class="flex items-center gap-2">
                 <span class="text-amber-400 font-extrabold text-sm">★ ${item.rating.toFixed(1)}</span>
                 ${canDelete ? `
+                  <button onclick="openEditReviewModal('${item.id}')" class="text-slate-500 hover:text-indigo-400 text-xs p-1" title="감상평 수정">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                  </button>
                   <button onclick="deleteReview('${item.id}')" class="text-slate-500 hover:text-rose-400 text-xs p-1" title="감상평 삭제">
                     <i class="fa-solid fa-trash"></i>
                   </button>
@@ -1761,22 +1625,23 @@
               </div>
             </div>
 
-            <p class="text-xs text-slate-200 font-medium italic bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/60">
+            <div class="p-3 rounded-xl bg-slate-900 border-l-2 ${isBook ? 'border-amber-500' : 'border-rose-500'} text-xs text-slate-200 italic font-medium">
               "${escapeHtml(item.oneLiner)}"
-            </p>
+            </div>
 
             ${item.detail ? `<p class="text-xs text-slate-300 leading-relaxed whitespace-pre-line">${escapeHtml(item.detail)}</p>` : ''}
 
-            <!-- Comment List -->
+            <!-- Comments -->
             <div class="pt-2 border-t border-slate-800/80 space-y-2">
-              <p class="text-[11px] font-bold text-slate-400">댓글 (${commentsList.length})</p>
-              <div class="space-y-1.5">
-                ${commentsList.length > 0 ? commentsHtml : '<p class="text-[11px] text-slate-500 py-1">아직 댓글이 없습니다.</p>'}
+              <div class="flex items-center justify-between text-[11px] text-slate-400">
+                <span>댓글 ${commentsList.length}개</span>
               </div>
-
+              <div class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                ${commentsList.length > 0 ? commentsHtml : '<p class="text-[11px] text-slate-500 text-center py-2">댓글이 없습니다.</p>'}
+              </div>
               <form onsubmit="handleAddComment(event, '${item.id}')" class="flex gap-2 pt-1">
-                <input type="text" placeholder="${state.activeUser}(으)로 댓글 작성..." required class="flex-1 bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                <button type="submit" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition">
+                <input type="text" placeholder="${state.activeUser}(으)로 댓글 작성..." required class="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                <button type="submit" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow">
                   등록
                 </button>
               </form>
@@ -1787,32 +1652,24 @@
 
       document.getElementById('detail-modal-body').innerHTML = `
         <div class="flex flex-col sm:flex-row gap-5">
-          <img src="${firstItem.coverUrl}" alt="${escapeHtml(firstItem.title)}" class="w-32 h-44 object-cover rounded-2xl border border-slate-800 shrink-0 shadow-lg bg-slate-900 mx-auto sm:mx-0">
-          <div class="flex-1 space-y-3">
-            <div>
-              <h2 class="text-lg font-extrabold text-white">${escapeHtml(firstItem.title)}</h2>
-              <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(firstItem.subTitle)}</p>
-            </div>
-
-            <div class="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-              <span class="text-xs text-slate-400 font-bold">친구들 평균 평점</span>
-              <div class="flex items-center gap-1">
-                <span class="text-amber-400 font-extrabold text-lg">★ ${avgRating.toFixed(1)}</span>
-                <span class="text-xs text-slate-500">/ 5.0 (${relatedReviews.length}명 참여)</span>
-              </div>
+          <img src="${first.coverUrl}" alt="${escapeHtml(first.title)}" class="w-32 h-44 object-cover rounded-2xl border border-slate-800 shrink-0 shadow-lg bg-slate-900 mx-auto sm:mx-0">
+          <div class="flex-1 space-y-2">
+            <h2 class="text-lg font-extrabold text-white">${escapeHtml(first.title)}</h2>
+            <p class="text-xs text-slate-400">${escapeHtml(first.subTitle)}</p>
+            <div class="pt-2">
+              <span class="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold">
+                ★ 전체 평균 ${avgRating} / 5.0
+              </span>
             </div>
           </div>
         </div>
 
-        <!-- Reviews Section -->
         <div class="pt-4 border-t border-slate-800 space-y-4">
           <h4 class="text-xs font-bold text-slate-200 flex items-center justify-between">
-            <span><i class="fa-regular fa-comments text-indigo-400"></i> 각 멤버별 감상평</span>
-            <span class="text-[11px] text-slate-500">현재 작성자: ${state.activeUser}</span>
+            <span><i class="fa-solid fa-users text-indigo-400"></i> 친구들 감상평 노트 (${matchingReviews.length}개)</span>
           </h4>
-
           <div class="space-y-4">
-            ${friendReviewsHtml}
+            ${reviewsListHtml}
           </div>
         </div>
       `;
@@ -1845,7 +1702,8 @@
         saveReviewsToStorage();
         await syncReviewToCloud(review);
         
-        // Refresh detail modal if open
+        input.value = '';
+        
         const modal = document.getElementById('post-detail-modal');
         if (!modal.classList.contains('hidden')) {
           openGroupDetailModal(review.workKey || review.title);
@@ -1853,7 +1711,7 @@
           renderFeed();
         }
 
-        showToast("새 댓글이 작성되었습니다!");
+        showToast("댓글이 작성되었습니다!");
       }
     }
 
@@ -1868,14 +1726,43 @@
       }
     }
 
-    async function toggleReaction(reviewId, type) {
+    async function editComment(reviewId, commentId) {
       const review = state.reviews.find(r => r.id === reviewId);
-      if (review) {
-        if (!review.reactions) review.reactions = { like: 0, heart: 0 };
-        review.reactions[type] = (review.reactions[type] || 0) + 1;
-        saveReviewsToStorage();
-        await syncReviewToCloud(review);
+      if (!review || !review.comments) return;
+
+      const comment = review.comments.find(c => c.id === commentId);
+      if (!comment) return;
+
+      const canEdit = (state.activeUser === '지영' || state.activeUser === comment.author);
+      if (!canEdit) {
+        showToast(`댓글 수정 권한이 없습니다. (${comment.author} 님 작성)`);
+        return;
+      }
+
+      showInputModal(
+        "댓글 수정하기",
+        "수정할 댓글 내용을 입력하세요...",
+        async (newText) => {
+          if (newText.trim()) {
+            comment.text = newText.trim();
+            comment.updatedAt = new Date().toISOString();
+            saveReviewsToStorage();
+            await syncReviewToCloud(review);
+            openGroupDetailModal(review.workKey || review.title);
+            showToast("댓글이 수정되었습니다.");
+          }
+        },
+        comment.text
+      );
+    }
+
+    function filterFeedByFriend(friendName) {
+      switchTab('feed');
+      const userSelect = document.getElementById('feed-filter-user');
+      if (userSelect) {
+        userSelect.value = friendName;
         renderFeed();
+        showToast(`'${friendName}' 님의 감상평만 모아봅니다.`);
       }
     }
 
@@ -1900,43 +1787,33 @@
         const friendReviews = state.reviews.filter(r => r.author === friend);
         const bookCnt = friendReviews.filter(r => r.type === 'book').length;
         const movieCnt = friendReviews.filter(r => r.type === 'movie').length;
-        const isJiyoung = state.activeUser === '지영';
 
         return `
-          <div onclick="filterFeedByFriend('${escapeHtml(friend)}')" class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 transition cursor-pointer group">
+          <div class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900 border border-slate-800">
             <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center group-hover:scale-105 transition">
-                ${escapeHtml(friend[0])}
-              </div>
-              <div>
-                <span class="text-xs font-bold text-white group-hover:text-indigo-400 transition">${escapeHtml(friend)}</span>
-                ${friend === '지영' ? '<span class="ml-1.5 px-1.5 py-0.2 text-[9px] font-extrabold rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">기본 관리자</span>' : ''}
-                <p class="text-[11px] text-slate-400 mt-0.5">총 ${friendReviews.length}개 기록</p>
-              </div>
+              <button onclick="filterFeedByFriend('${escapeHtml(friend)}')" class="flex items-center gap-3 text-left hover:opacity-80 transition group">
+                <div class="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center group-hover:ring-2 ring-indigo-400">
+                  ${escapeHtml(friend[0])}
+                </div>
+                <div>
+                  <span class="text-xs font-bold text-white group-hover:text-indigo-400 transition">${escapeHtml(friend)}</span>
+                  <span class="text-[11px] text-slate-400 ml-2">총 ${friendReviews.length}개 기록</span>
+                </div>
+              </button>
             </div>
 
             <div class="flex items-center gap-2 text-xs text-slate-400">
               <span class="px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-400 font-semibold">📚 책 ${bookCnt}</span>
               <span class="px-2.5 py-0.5 rounded-lg bg-rose-500/10 text-rose-400 font-semibold">🎬 영화 ${movieCnt}</span>
-              ${(isJiyoung && friend !== '지영') ? `
-                <button onclick="promptDeleteFriend(event, '${escapeHtml(friend)}')" class="text-slate-500 hover:text-rose-400 p-1.5 ml-1 text-xs" title="멤버 삭제">
-                  <i class="fa-solid fa-trash"></i>
+              ${(state.activeUser === '지영' && friend !== '지영') ? `
+                <button onclick="promptDeleteFriend(event, '${escapeHtml(friend)}')" class="ml-2 text-rose-400 hover:text-rose-300 p-1 transition" title="멤버 삭제">
+                  <i class="fa-solid fa-trash text-xs"></i>
                 </button>
               ` : ''}
             </div>
           </div>
         `;
       }).join('');
-    }
-
-    function filterFeedByFriend(friendName) {
-      switchTab('feed');
-      const userSelect = document.getElementById('feed-filter-user');
-      if (userSelect) {
-        userSelect.value = friendName;
-        renderFeed();
-        showToast(`'${friendName}' 님의 감상평만 모아봅니다.`);
-      }
     }
 
     function exportDataJSON() {
