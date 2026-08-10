@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>문화 클럽 로그 - 우리들만의 책 & 영화 리뷰 라이브러리</title>
+  <title>Culture Club - 우리들만의 책 & 영화 리뷰 라이브러리 🦭</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -16,16 +16,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    window.FirebaseSDK = {
-      initializeApp, getAuth, signInAnonymously, signInWithCustomToken,
-      getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot
-    };
-  </script>
+  <!-- Firebase Compat SDKs (CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
   <script>
     tailwind.config = {
@@ -103,9 +97,9 @@
           </div>
           <div>
             <h1 class="font-extrabold text-lg tracking-tight text-white flex items-center gap-2 font-outfit">
-              CULTURE LOG
+              Culture Club
             </h1>
-            <p class="text-[11px] text-slate-400 hidden sm:block">우리들만의 책 & 영화 리뷰 라이브러리</p>
+            <p class="text-[11px] text-slate-400 hidden sm:block">우리들만의 책 & 영화 리뷰 라이브러리 🦭</p>
           </div>
         </div>
 
@@ -509,6 +503,55 @@
     </div>
   </div>
 
+  <!-- CUSTOM CONFIRMATION MODAL -->
+  <div id="custom-confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+    <div class="relative w-full max-w-sm bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in text-center">
+      <div class="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center mx-auto text-xl">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <div>
+        <h3 id="confirm-modal-title" class="text-base font-bold text-white">확인</h3>
+        <p id="confirm-modal-message" class="text-xs text-slate-300 mt-1.5 leading-relaxed">정말 진행하시겠습니까?</p>
+      </div>
+      <div class="flex items-center justify-center gap-3 pt-2">
+        <button onclick="closeConfirmModal()" class="flex-1 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+          취소
+        </button>
+        <button onclick="handleConfirmAction()" class="flex-1 py-2.5 rounded-xl text-xs font-extrabold bg-rose-600 hover:bg-rose-500 text-white shadow-lg transition">
+          삭제 진행
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOM INPUT MODAL (Friend Add) -->
+  <div id="custom-input-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+    <div class="relative w-full max-w-sm bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 id="input-modal-title" class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-user-plus text-indigo-400"></i> 친구 등록
+        </h3>
+        <button onclick="closeInputModal()" class="text-slate-400 hover:text-white transition p-1">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      <form onsubmit="handleInputAction(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1.5">이름 입력</label>
+          <input type="text" id="input-modal-value" required placeholder="이름을 입력하세요..." class="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <button type="button" onclick="closeInputModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 transition">
+            취소
+          </button>
+          <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition shadow">
+            등록하기
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
@@ -516,11 +559,135 @@
     /* ==========================================================================
        OPEN API KEYS, FIREBASE STATE & GLOBAL APP LOGIC
        ========================================================================== */
+    let confirmCallback = null;
+    let promptCallback = null;
+
+    function showConfirmModal(title, message, onConfirm) {
+      document.getElementById('confirm-modal-title').textContent = title;
+      document.getElementById('confirm-modal-message').textContent = message;
+      confirmCallback = onConfirm;
+      document.getElementById('custom-confirm-modal').classList.remove('hidden');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('custom-confirm-modal').classList.add('hidden');
+      confirmCallback = null;
+    }
+
+    function handleConfirmAction() {
+      if (confirmCallback) {
+        confirmCallback();
+      }
+      closeConfirmModal();
+    }
+
+    function showInputModal(title, placeholder, onSubmit) {
+      document.getElementById('input-modal-title').textContent = title;
+      const inputEl = document.getElementById('input-modal-value');
+      inputEl.placeholder = placeholder;
+      inputEl.value = '';
+      promptCallback = onSubmit;
+      document.getElementById('custom-input-modal').classList.remove('hidden');
+      setTimeout(() => inputEl.focus(), 100);
+    }
+
+    function closeInputModal() {
+      document.getElementById('custom-input-modal').classList.add('hidden');
+      promptCallback = null;
+    }
+
+    function handleInputAction(e) {
+      e.preventDefault();
+      const val = document.getElementById('input-modal-value').value.trim();
+      if (promptCallback && val) {
+        promptCallback(val);
+      }
+      closeInputModal();
+    }
+
+    function promptAddFriend() {
+      showInputModal(
+        "새 친구 등록하기",
+        "새로운 작성자(친구)의 이름을 입력하세요...",
+        (name) => {
+          const cleanName = name.trim();
+          if (cleanName === '민우') {
+            showToast("'민우'는 등록할 수 없는 이름입니다.");
+            return;
+          }
+          if (!state.friends.includes(cleanName)) {
+            state.friends.push(cleanName);
+            state.activeUser = cleanName;
+            saveReviewsToStorage();
+            renderUserDropdown();
+            updateStats();
+            showToast(`새 친구 '${cleanName}'(이)가 추가되었습니다.`);
+          } else {
+            showToast(`이미 '${cleanName}' 멤버가 존재합니다.`);
+          }
+        }
+      );
+    }
+
+    function promptDeleteFriend(e, friendName) {
+      if (e) e.stopPropagation();
+      if (state.activeUser !== '지영') {
+        showToast("작성자 삭제는 '지영' 계정으로 설정되었을 때만 가능합니다.");
+        return;
+      }
+      if (friendName === '지영') {
+        showToast("기본 관리자 '지영'은 삭제할 수 없습니다.");
+        return;
+      }
+
+      showConfirmModal(
+        "멤버 삭제",
+        `정말 멤버 '${friendName}'님을 삭제하시겠습니까?`,
+        () => {
+          state.friends = state.friends.filter(f => f !== friendName);
+          if (state.activeUser === friendName) state.activeUser = '지영';
+          saveReviewsToStorage();
+          renderUserDropdown();
+          updateStats();
+          showToast(`멤버 '${friendName}'님이 삭제되었습니다.`);
+        }
+      );
+    }
+
+    async function deleteReview(reviewId) {
+      const review = state.reviews.find(r => r.id === reviewId);
+      if (!review) return;
+
+      const canDelete = (state.activeUser === '지영' || state.activeUser === review.author);
+      if (!canDelete) {
+        showToast(`삭제 권한이 없습니다. (${review.author} 님 작성)`);
+        return;
+      }
+
+      showConfirmModal(
+        "감상평 삭제",
+        `"${review.title}" 감상평을 정말 삭제하시겠습니까?`,
+        async () => {
+          state.reviews = state.reviews.filter(r => r.id !== reviewId);
+          saveReviewsToStorage();
+          await deleteReviewFromCloud(reviewId);
+
+          const modal = document.getElementById('post-detail-modal');
+          if (!modal.classList.contains('hidden')) {
+            closePostDetailModal();
+          }
+
+          renderFeed();
+          updateStats();
+          showToast("감상평이 삭제되었습니다.");
+        }
+      );
+    }
+
     const KAKAO_API_KEY = "c983a472407e0547534b6b3cf1797603";
     const TMDB_API_KEY = "830703efc489053392e33acd6b820a1e";
-
     const DEFAULT_FIREBASE_CONFIG = {
-      apiKey: "AIzaSyDy3MPLN2kmYEde4eIdEREMjfbhGwZcXI",
+      apiKey: "AIzaSyDy3MPLN2kmYyEde4eIdEREMjfbhGwZcXI",
       authDomain: "culture-club-log.firebaseapp.com",
       projectId: "culture-club-log",
       storageBucket: "culture-club-log.firebasestorage.app",
@@ -532,22 +699,20 @@
 
     let db = null;
     let auth = null;
-    let currentUser = null;
     let isFirebaseConnected = false;
 
     let state = {
-      currentTab: 'search',    // Default to search tab
-      viewMode: 'grid',        // 'grid' or 'feed'
+      currentTab: 'search',
+      viewMode: 'grid',
       activeUser: '지영',
-      friends: ['지영', '수현'],
+      friends: ['지영'],
       selectedRating: 5.0,
-      reviews: [],             // Saved culture logs
-      activeSearchItem: null   // Item being reviewed in modal
+      reviews: [],
+      activeSearchItem: null
     };
 
-    const HOT_RECOMMEND_TAGS = ['소년이 온다', '인사이드 아웃 2', '불편한 편의점', '파묘', '세이노의 가르침', '헤어질 결심'];
+    const HOT_RECOMMEND_TAGS = ['소년이 온다', '인사이드 아웃 2', '불편한 편의점', '모순', '헤어질 결심', '파묘'];
 
-    // Initial Seed Data
     const INITIAL_SEED_REVIEWS = [
       {
         id: "book_1",
@@ -556,30 +721,15 @@
         title: "소년이 온다",
         subTitle: "한강 저 · 창비",
         coverUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&auto=format&fit=crop&q=80",
-        rating: 5,
+        rating: 5.0,
         oneLiner: "역사의 아픔을 가슴 깊이 새기게 하는 묵직하고 아름다운 문장들.",
         detail: "작품 속에 등장하는 '혼'의 의미와 상처를 치유하는 과정에 대해 토론해보고 싶습니다.",
         author: "지영",
         createdAt: "2026-08-04T14:20:00.000Z",
         reactions: { like: 4, heart: 3 },
         comments: [
-          { id: "c1", author: "지영", text: "읽는 동안 마음이 많이 아팠지만 꼭 읽어야 할 작품이었어.", createdAt: "2026-08-04T15:00:00.000Z" }
+          { id: "c1", author: "지영", text: "다시 읽어도 가슴이 뭉클하네요.", createdAt: "2026-08-04T15:00:00.000Z" }
         ]
-      },
-      {
-        id: "book_1_sub",
-        workKey: "book_소년이 온다",
-        type: "book",
-        title: "소년이 온다",
-        subTitle: "한강 저 · 창비",
-        coverUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&auto=format&fit=crop&q=80",
-        rating: 4.5,
-        oneLiner: "시적인 문장 속에 담긴 가슴 아픈 잔향. 오래도록 기억하고 싶습니다.",
-        detail: "역사의 소용돌이 속 개인의 존엄성에 대해 다시금 깊이 생각해보게 되었습니다.",
-        author: "수현",
-        createdAt: "2026-08-05T10:00:00.000Z",
-        reactions: { like: 2, heart: 1 },
-        comments: []
       },
       {
         id: "movie_1",
@@ -590,25 +740,10 @@
         coverUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&auto=format&fit=crop&q=80",
         rating: 4.5,
         oneLiner: "사춘기의 불안함마저 나 자신의 소중한 일부임을 따뜻하게 안아준다.",
-        detail: "'불안이' 캐릭터가 폭주할 때 청소년기 내 모습이 생각나서 뭉클했음. 모임 친구들과 함께 보기 좋은 영화!",
+        detail: "'불안이' 캐릭터가 폭주할 때 청소년기 내 모습이 생각나서 뭉클했음.",
         author: "지영",
         createdAt: "2026-08-05T09:10:00.000Z",
         reactions: { like: 6, heart: 4 },
-        comments: []
-      },
-      {
-        id: "book_2",
-        workKey: "book_불편한 편의점",
-        type: "book",
-        title: "불편한 편의점",
-        subTitle: "김호연 저 · 나무옆의자",
-        coverUrl: "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&auto=format&fit=crop&q=80",
-        rating: 4.8,
-        oneLiner: "청파동 골목길 편의점에서 느껴지는 따뜻한 온기와 이웃들의 소소한 삶.",
-        detail: "가볍게 읽기 시작했다가 마음이 잔잔해지는 위로를 받았습니다.",
-        author: "지영",
-        createdAt: "2026-08-06T11:00:00.000Z",
-        reactions: { like: 3, heart: 2 },
         comments: []
       }
     ];
@@ -637,19 +772,24 @@
       const cloudStatusIndicator = document.getElementById('cloud-status-indicator');
 
       try {
+        if (typeof firebase === 'undefined') {
+          throw new Error("Firebase SDK script not loaded yet");
+        }
+
         const configObj = DEFAULT_FIREBASE_CONFIG;
-        const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore, collection, onSnapshot } = window.FirebaseSDK;
+        
+        if (!firebase.apps.length) {
+          firebase.initializeApp(configObj);
+        }
 
-        const app = initializeApp(configObj);
-        auth = getAuth(app);
-        db = getFirestore(app);
+        auth = firebase.auth();
+        db = firebase.firestore();
 
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          const userCred = await signInWithCustomToken(auth, __initial_auth_token);
-          currentUser = userCred.user;
-        } else {
-          const userCred = await signInAnonymously(auth);
-          currentUser = userCred.user;
+        // Try anonymous sign-in, but don't fail if anonymous auth is disabled on console
+        try {
+          await auth.signInAnonymously();
+        } catch (authErr) {
+          console.warn("Anonymous auth warning (Firestore will attempt unauthenticated access):", authErr);
         }
 
         isFirebaseConnected = true;
@@ -657,9 +797,9 @@
         if (cloudStatusIndicator) cloudStatusIndicator.className = "text-xs text-emerald-400 flex items-center gap-1.5 font-bold";
 
         // Firestore Realtime Listener
-        const reviewsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'reviews');
+        const reviewsCollection = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews');
         
-        onSnapshot(reviewsCollection, (snapshot) => {
+        reviewsCollection.onSnapshot((snapshot) => {
           const cloudReviews = [];
           snapshot.forEach(docSnap => {
             const data = docSnap.data();
@@ -725,22 +865,18 @@
     }
 
     async function syncReviewToCloud(reviewObj) {
-      if (!isFirebaseConnected || !db || !currentUser) return;
+      if (!isFirebaseConnected || !db) return;
       try {
-        const { setDoc, doc } = window.FirebaseSDK;
-        const reviewRef = doc(db, 'artifacts', appId, 'public', 'data', 'reviews', reviewObj.id);
-        await setDoc(reviewRef, reviewObj);
+        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(reviewObj.id).set(reviewObj);
       } catch (err) {
         console.error("Firestore sync error:", err);
       }
     }
 
     async function deleteReviewFromCloud(reviewId) {
-      if (!isFirebaseConnected || !db || !currentUser) return;
+      if (!isFirebaseConnected || !db) return;
       try {
-        const { deleteDoc, doc } = window.FirebaseSDK;
-        const reviewRef = doc(db, 'artifacts', appId, 'public', 'data', 'reviews', reviewId);
-        await deleteDoc(reviewRef);
+        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(reviewId).delete();
       } catch (err) {
         console.error("Firestore delete error:", err);
       }
