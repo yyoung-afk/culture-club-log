@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Culture Club 🦭 - 우리들만의 책 & 영화 리뷰 라이브러리</title>
+  
+  <!-- Cache Control Meta Tags for Mobile Browsers -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+
+  <title>Culture Club 🦭 - 우리들만의 책 & 영화 리뷰 라이브러리 🦭</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -116,14 +122,14 @@
           </button>
         </nav>
 
-        <!-- Right Controls: Backup Button & Member Switcher -->
+        <!-- Right Controls: Backup Download & Member Selector -->
         <div class="flex items-center gap-2.5">
           <button onclick="exportDataJSON()" title="전체 리뷰 데이터를 JSON 파일로 다운로드합니다." class="px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
             <i class="fa-solid fa-download text-indigo-400 text-[11px]"></i>
             <span class="hidden sm:inline">백업 다운로드</span>
           </button>
 
-          <!-- Member Switcher -->
+          <!-- Member Switcher Dropdown -->
           <div class="relative inline-block text-left">
             <div class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-full pl-2 pr-3.5 py-1 cursor-pointer transition shadow-sm" onclick="toggleUserMenu()">
               <div id="current-user-avatar" class="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center font-extrabold text-xs ring-2 ring-indigo-400/50">
@@ -154,7 +160,7 @@
       </div>
     </div>
 
-    <!-- Mobile Navigation Bar -->
+    <!-- Mobile Bottom Navigation Bar -->
     <div class="md:hidden border-t border-slate-800 bg-slate-900/95 flex justify-around py-2 px-1">
       <button onclick="switchTab('search')" id="mobile-nav-search" class="flex flex-col items-center gap-1 text-indigo-400 text-xs font-medium">
         <i class="fa-solid fa-magnifying-glass text-sm"></i>
@@ -586,10 +592,18 @@
       loadSavedReviews();
       renderUserDropdown();
       renderQuickTags();
+      updateFeedBadge();
       
       switchTab('search');
       await initFirebaseCloud();
       loadPopularContents();
+    }
+
+    function updateFeedBadge() {
+      const badge = document.getElementById('feed-count-badge');
+      if (badge) {
+        badge.textContent = state.reviews.length;
+      }
     }
 
     async function initFirebaseCloud() {
@@ -632,7 +646,6 @@
           if (cloudReviews.length > 0) {
             state.reviews = cloudReviews;
 
-            // 작성된 글에서 새로운 작성자 이름이 있으면 자동으로 친구 목록에 추가
             let addedNewAuthor = false;
             cloudReviews.forEach(r => {
               if (r.author && r.author !== '민우' && !state.friends.includes(r.author)) {
@@ -643,6 +656,7 @@
 
             saveReviewsToStorage(false);
             renderUserDropdown();
+            updateFeedBadge();
 
             if (state.currentTab === 'feed') renderFeed();
             if (state.currentTab === 'stats') updateStats();
@@ -655,7 +669,7 @@
           console.warn("Firestore subscription warning:", err);
         });
 
-        // Firebase 클라우드에서 친구(작성자) 목록 실시간 수신
+        // Sync friends list from Firebase Cloud
         const friendsDoc = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('meta').doc('friends');
         friendsDoc.onSnapshot((docSnap) => {
           if (docSnap.exists) {
@@ -750,6 +764,7 @@
     function saveReviewsToStorage(shouldSyncCloud = true) {
       localStorage.setItem('culture_log_reviews', JSON.stringify(state.reviews));
       localStorage.setItem('culture_log_friends', JSON.stringify(state.friends));
+      updateFeedBadge();
     }
 
     function showConfirmModal(title, message, onConfirm) {
@@ -1424,7 +1439,7 @@
         return true;
       });
 
-      document.getElementById('feed-count-badge').textContent = state.reviews.length;
+      updateFeedBadge();
 
       if (state.reviews.length > 0) {
         const topItem = state.reviews[0];
@@ -1677,7 +1692,7 @@
 
             ${item.detail ? `<p class="text-xs text-slate-300 leading-relaxed whitespace-pre-line">${escapeHtml(item.detail)}</p>` : ''}
 
-            <!-- Comments -->
+            <!-- Comments Thread -->
             <div class="pt-2 border-t border-slate-800/80 space-y-2">
               <div class="flex items-center justify-between text-[11px] text-slate-400">
                 <span>댓글 ${commentsList.length}개</span>
@@ -1866,7 +1881,7 @@
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.reviews, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `culture_log_backup_${new Date().toISOString().slice(0,10)}.json`);
+      downloadAnchor.setAttribute("download", `culture_club_backup_${new Date().toISOString().slice(0,10)}.json`);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
