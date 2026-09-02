@@ -84,6 +84,14 @@
       animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
+    @keyframes heroFade {
+      0% { opacity: 0.2; transform: translateY(4px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .hero-content-anim {
+      animation: heroFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
     .poster-glow:hover {
       box-shadow: 0 12px 30px -10px rgba(99, 102, 241, 0.3);
     }
@@ -234,24 +242,33 @@
 
     <!-- TAB 2: CULTURE LOG FEED VIEW -->
     <section id="tab-feed" class="hidden space-y-6">
-      <div id="hero-banner-container" class="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-indigo-950/60 p-6 md:p-8 shadow-2xl">
+      <!-- HERO BANNER (ROTATING RANDOM REVIEWS) -->
+      <div id="hero-banner-container" class="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-indigo-950/60 p-6 md:p-8 shadow-2xl transition duration-300">
         <div class="absolute right-0 top-0 bottom-0 w-1/2 opacity-20 pointer-events-none bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-500 via-rose-500 to-transparent"></div>
         
         <div class="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div class="space-y-2 max-w-xl">
-            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-bold">
-              <i class="fa-solid fa-crown text-amber-400"></i> 이달의 대표 감상평
+          <div id="hero-text-wrapper" class="space-y-2 max-w-xl hero-content-anim">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-bold">
+                <i class="fa-solid fa-crown text-amber-400"></i> 이 달의 대표 감상평
+              </span>
+              <button onclick="displayRandomHeroReview()" title="다른 친구의 감상평 랜덤 보기" class="px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 text-[11px] font-medium transition flex items-center gap-1">
+                <i class="fa-solid fa-shuffle text-indigo-400 text-[10px]"></i>
+                <span>새로고침</span>
+              </button>
             </div>
-            <h2 id="hero-title" class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+            
+            <h2 id="hero-title" class="text-xl sm:text-2xl font-extrabold text-white tracking-tight leading-snug">
               책과 영화로 이어지는 친구들의 이야기
             </h2>
             <p id="hero-sub" class="text-xs sm:text-sm text-slate-300 line-clamp-2 leading-relaxed">
               작품을 같이 읽고 감상을 나누며 서로의 시선을 공유해보세요.
             </p>
             <div id="hero-meta" class="flex items-center gap-3 pt-2 text-xs text-slate-400">
-              <span class="text-amber-400 font-bold flex items-center gap-1"><i class="fa-solid fa-star"></i> 5.0</span>
+              <span class="text-amber-400 font-bold flex items-center gap-1"><i class="fa-solid fa-star"></i> <span id="hero-rating">5.0</span></span>
               <span>·</span>
-              <span id="hero-author" class="text-slate-200 font-semibold">지영</span>
+              <span id="hero-author" class="text-slate-200 font-semibold">지영 님</span>
+              <span id="hero-type-tag" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-slate-950">📚 도서</span>
             </div>
           </div>
 
@@ -520,6 +537,8 @@
     let isFirebaseConnected = false;
     let confirmCallback = null;
     let promptCallback = null;
+    let heroRotationTimer = null;
+    let currentHeroIndex = -1;
 
     let state = {
       currentTab: 'search',
@@ -528,7 +547,7 @@
       friends: ['지영', '수현'],
       selectedRating: 5.0,
       reviews: [],
-      searchResults: [], // 검색 결과 객체들을 안전하게 보관하는 배열
+      searchResults: [],
       activeSearchItem: null,
       editingReviewId: null
     };
@@ -659,7 +678,10 @@
             renderUserDropdown();
             updateFeedBadge();
 
-            if (state.currentTab === 'feed') renderFeed();
+            if (state.currentTab === 'feed') {
+              renderFeed();
+              displayRandomHeroReview();
+            }
             if (state.currentTab === 'stats') updateStats();
 
             if (addedNewAuthor) {
@@ -835,8 +857,80 @@
 
       if (tabName === 'feed') {
         renderFeed();
-      } else if (tabName === 'stats') {
-        updateStats();
+        displayRandomHeroReview();
+        startHeroRotation();
+      } else {
+        stopHeroRotation();
+        if (tabName === 'stats') {
+          updateStats();
+        }
+      }
+    }
+
+    // ==========================================
+    // HERO BANNER RANDOM ROTATION FUNCTIONS
+    // ==========================================
+    function displayRandomHeroReview() {
+      const heroWrapper = document.getElementById('hero-text-wrapper');
+      const titleEl = document.getElementById('hero-title');
+      const subEl = document.getElementById('hero-sub');
+      const authorEl = document.getElementById('hero-author');
+      const ratingEl = document.getElementById('hero-rating');
+      const typeTagEl = document.getElementById('hero-type-tag');
+
+      if (!state.reviews || state.reviews.length === 0) {
+        if (titleEl) titleEl.textContent = "책과 영화로 이어지는 친구들의 이야기";
+        if (subEl) subEl.textContent = "작품을 같이 읽고 감상을 나누며 서로의 시선을 공유해보세요.";
+        if (authorEl) authorEl.textContent = "작성자 님";
+        if (ratingEl) ratingEl.textContent = "5.0";
+        if (typeTagEl) typeTagEl.textContent = "📚 도서";
+        return;
+      }
+
+      // Select random review avoiding consecutive repeat if multiple reviews exist
+      let nextIndex = Math.floor(Math.random() * state.reviews.length);
+      if (state.reviews.length > 1 && nextIndex === currentHeroIndex) {
+        nextIndex = (nextIndex + 1) % state.reviews.length;
+      }
+      currentHeroIndex = nextIndex;
+      const item = state.reviews[nextIndex];
+
+      if (heroWrapper) {
+        heroWrapper.classList.remove('hero-content-anim');
+        void heroWrapper.offsetWidth; // Trigger reflow for smooth re-animation
+        heroWrapper.classList.add('hero-content-anim');
+      }
+
+      if (titleEl) titleEl.textContent = `"${item.oneLiner}"`;
+      if (subEl) subEl.textContent = `${item.title} · ${item.subTitle}`;
+      if (authorEl) authorEl.textContent = `${item.author} 님`;
+      if (ratingEl) ratingEl.textContent = (item.rating || 5.0).toFixed(1);
+
+      if (typeTagEl) {
+        if (item.type === 'book') {
+          typeTagEl.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-slate-950";
+          typeTagEl.textContent = "📚 도서";
+        } else {
+          typeTagEl.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-600 text-white";
+          typeTagEl.textContent = "🎬 영화";
+        }
+      }
+    }
+
+    function startHeroRotation() {
+      stopHeroRotation();
+      // Rotate hero review randomly every 6 seconds
+      heroRotationTimer = setInterval(() => {
+        if (state.currentTab === 'feed') {
+          displayRandomHeroReview();
+        }
+      }, 6000);
+    }
+
+    function stopHeroRotation() {
+      if (heroRotationTimer) {
+        clearInterval(heroRotationTimer);
+        heroRotationTimer = null;
       }
     }
 
@@ -986,7 +1080,6 @@
       const grid = document.getElementById('search-results-grid');
       const countTag = document.getElementById('search-count-tag');
 
-      // 검색 시마다 searchResults 배열을 리셋합니다.
       state.searchResults = [];
 
       const totalCount = books.length + movies.length;
@@ -1401,6 +1494,7 @@
         openGroupDetailModal(state.activeSearchItem.workKey || state.activeSearchItem.title);
       } else {
         renderFeed();
+        displayRandomHeroReview();
       }
     }
 
@@ -1428,6 +1522,7 @@
           }
 
           renderFeed();
+          displayRandomHeroReview();
           updateStats();
           showToast("감상평이 삭제되었습니다.");
         }
@@ -1447,14 +1542,6 @@
       });
 
       updateFeedBadge();
-
-      if (state.reviews.length > 0) {
-        const topItem = state.reviews[0];
-        document.getElementById('hero-title').textContent = `"${topItem.oneLiner}"`;
-        document.getElementById('hero-sub').textContent = `${topItem.title} · ${topItem.subTitle}`;
-        document.getElementById('hero-author').textContent = `${topItem.author} 님`;
-        document.getElementById('hero-meta').querySelector('.text-amber-400').innerHTML = `<i class="fa-solid fa-star"></i> ${topItem.rating.toFixed(1)}`;
-      }
 
       if (filtered.length === 0) {
         container.className = "block";
