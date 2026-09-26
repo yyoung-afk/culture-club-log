@@ -668,13 +668,11 @@
         auth = firebase.auth();
         db = firebase.firestore();
 
-        // Firestore 오프라인 캐시/쓰기 큐는 보조 수단으로만 사용한다.
-        // 여러 탭에서 이미 활성화되어 있으면 실패할 수 있으므로 앱 자체 동기화는 별도로 유지한다.
-        try {
-          await db.enablePersistence({ synchronizeTabs: true });
-        } catch (persistErr) {
-          console.warn("Firestore persistence warning:", persistErr);
-        }
+        // Firestore 오프라인 캐시(enablePersistence)는 의도적으로 사용하지 않는다.
+        // 이 기능은 카카오톡/인스타그램 등 인앱 브라우저나 모바일 웹뷰에서 IndexedDB
+        // 접근이 제한될 때 실시간 리스너(onSnapshot)가 계속 끊기고 재연결을 반복하는
+        // 원인으로 자주 보고된다. 이 앱은 이미 자체 보류 큐(outbox)로 오프라인 저장을
+        // 처리하므로 enablePersistence 없이도 오프라인 대응이 가능하다.
 
         // 기존 앱과 동일하게 익명 인증을 시도하되, 인증 실패 때문에 전체 초기화를 중단하지 않는다.
         // Firestore 규칙이 비인증 접근을 허용하는 프로젝트일 수도 있기 때문이다.
@@ -715,6 +713,7 @@
     // ── 실시간 리뷰 구독 (끊기면 자동 재구독) ──────────────────────────
     let reviewsUnsubscribe = null;
     let reviewsReconnectTimer = null;
+    let reviewsReconnectAttempts = 0;
 
     function buildVisibleReviewsFromCloud(cloudReviews) {
       const byId = new Map();
@@ -795,6 +794,9 @@
         // 그대로 두어 클라우드와 화면 상태가 서로 달라질 수 있었다.
         applyCloudReviews(cloudReviews);
 
+        // 정상 스냅샷을 받았으니 재연결 시도 횟수(백오프)를 초기화한다.
+        reviewsReconnectAttempts = 0;
+
         if (cloudStatusText) cloudStatusText.textContent =
           snapshot.metadata && snapshot.metadata.fromCache
             ? "🟡 Firebase 연결됨 · 캐시에서 표시 중"
@@ -807,9 +809,15 @@
         // 서버 스냅샷을 받았을 때도 혹시 남아있는 보류 큐를 바로 재시도한다.
         flushPendingSyncQueue();
       }, (err) => {
-        console.warn("Firestore subscription warning:", err);
-        if (cloudStatusText) cloudStatusText.textContent = "🟡 실시간 연결 끊김 · 재연결 시도 중...";
+        // 실제 오류 코드를 콘솔과 토스트에 남긴다. 기존에는 항상 "재연결 시도 중"이라는
+        // 문구만 떠서 permission-denied(보안규칙 문제)인지 unavailable(네트워크 문제)인지
+        // 구분할 수 없었다.
+        console.error("Firestore subscription error:", err && err.code, err);
+        if (cloudStatusText) cloudStatusText.textContent = `🟡 실시간 연결 끊김(${err && err.code || 'unknown'}) · 재연결 시도 중...`;
         if (cloudStatusIndicator) cloudStatusIndicator.className = "text-xs text-amber-400 flex items-center gap-1.5 font-bold";
+
+        reviewsReconnectAttempts = Math.min(reviewsReconnectAttempts + 1, 6);
+        const backoffMs = Math.min(5000 * Math.pow(2, reviewsReconnectAttempts - 1), 60000);
 
         if (!reviewsReconnectTimer) {
           reviewsReconnectTimer = setTimeout(() => {
@@ -817,7 +825,7 @@
             if (isFirebaseConnected && window.__reviewsCollectionRef) {
               subscribeReviewsListener(window.__reviewsCollectionRef);
             }
-          }, 5000);
+          }, backoffMs);
         }
       });
     }
@@ -875,18 +883,22 @@
       }
     }
 
-    function isAlreadyExistsError(err) {
-      const code = String(err && err.code ? err.code : '').toLowerCase();
-      return code === 'already-exists' || code === '6' ||
-             String(err && err.message ? err.message : '').toLowerCase().includes('already exists');
-    }
-
+    // 이전 버전은 db.batch().create(ref, review)를 사용했는데, WriteBatch.create()는
+    // Firestore 클라이언트(웹) SDK에는 존재하지 않는 메서드다(Admin SDK 전용).
+    // 즉 호출할 때마다 "batch.create is not a function" TypeError가 100% 발생했고,
+    // 이게 "복구 0/26건 완료, 실패한 26건"으로 항상 표시되던 진짜 원인이었다.
+    // 트랜잭션(runTransaction)으로 "문서가 없을 때만 생성"을 안전하게 구현한다.
     async function commitRecoveryCreate(review) {
       const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(review.id);
-      const batch = db.batch();
-      // create는 "문서가 없을 때만 생성"한다. 이미 존재하는 리뷰는 절대 덮어쓰지 않는다.
-      batch.create(ref, review);
-      await batch.commit();
+      return db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (snap.exists) {
+          // 이미 존재하는 리뷰는 절대 덮어쓰지 않는다(댓글/반응 보존).
+          return 'existing';
+        }
+        tx.set(ref, review);
+        return 'created';
+      });
     }
 
     async function flushPendingSyncQueue() {
@@ -903,12 +915,8 @@
           if (op.type === 'delete') {
             await ref.delete();
           } else if (op.type === 'recovery') {
-            try {
-              await commitRecoveryCreate(op.review);
-            } catch (err) {
-              // 다른 기기가 먼저 만든 경우는 성공으로 간주한다.
-              if (!isAlreadyExistsError(err)) throw err;
-            }
+            // commitRecoveryCreate는 이미 존재하면 'existing'을 반환할 뿐 에러를 던지지 않는다.
+            await commitRecoveryCreate(op.review);
           } else {
             await ref.set(op.review, { merge: true });
           }
@@ -936,14 +944,15 @@
     // 그 방식은 source:'server'가 네트워크/Firestore 상태에 따라 실패하고,
     // 실패 시 26개 복구 자체가 시작되지 않는 것이 핵심 문제였다.
     //
-    // 대신 각 문서를 create()로 시도한다.
-    // - 이미 존재: already-exists → 그대로 보존
-    // - 없음: 새로 생성
+    // 대신 각 문서를 트랜잭션으로 "없을 때만 생성"한다(commitRecoveryCreate 참고).
+    // - 이미 존재: 트랜잭션이 'existing' 반환 → 그대로 보존
+    // - 없음: 트랜잭션이 'created' 반환하며 새로 생성
     // - 네트워크/권한 실패: outbox에 남겨 재시도
     //
-    // 따라서 서버에 전체 목록을 먼저 읽어야 한다는 전제가 사라지고,
-    // 기존 문서의 댓글/반응을 복구 시드가 덮어쓰지도 않는다.
-    const RECOVERY_SEED_VERSION = 'v2';
+    // v3: 이전 버전은 batch.create()가 웹 SDK에 존재하지 않아 26건이 전부
+    // TypeError로 실패했었다. 버전을 올려 그 시점에 쌓인 오래된 outbox 항목과
+    // 무관하게 항상 한 번은 깨끗하게 재검증하도록 한다.
+    const RECOVERY_SEED_VERSION = 'v3';
     let recoveryMigrationComplete = false;
     let recoveryMigrationPromise = null;
 
@@ -965,17 +974,18 @@
         let existing = 0;
         let failed = 0;
 
-        // 이전 버전의 잘못된 완료 플래그는 명시적으로 무시하고 v2 검증을 다시 수행한다.
+        // 이전 버전(v1, v2)의 잘못된 완료 플래그와 그 시점에 쌓인 낡은 outbox 항목을
+        // 정리하고 v3 기준으로 다시 검증한다.
         localStorage.removeItem('culture_log_recovery_migrated_v1');
+        localStorage.removeItem('culture_log_recovery_migrated_v2');
+        setPendingQueue(getPendingQueue().filter(op => op.type !== 'recovery'));
 
         const results = await Promise.all(RECOVERY_SEED_REVIEWS.map(async (review) => {
           try {
-            await commitRecoveryCreate(review);
-            return 'created';
+            // commitRecoveryCreate가 직접 'created' 또는 'existing'을 반환한다.
+            return await commitRecoveryCreate(review);
           } catch (err) {
-            if (isAlreadyExistsError(err)) return 'existing';
-
-            console.error("복구 시드 업로드 실패:", review.id, err);
+            console.error("복구 시드 업로드 실패:", review.id, err && err.code, err);
             queuePendingSync({ type: 'recovery', id: review.id, review });
             return 'failed';
           }
