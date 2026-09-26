@@ -132,12 +132,6 @@
 
         <!-- Right Controls: Backup Download & Member Selector -->
         <div class="flex items-center gap-2.5">
-          <button onclick="forceResync()" title="서버에서 최신 데이터를 강제로 다시 불러옵니다. 기기 간 데이터가 다르게 보일 때 눌러주세요." class="relative px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
-            <i class="fa-solid fa-rotate text-emerald-400 text-[11px]"></i>
-            <span class="hidden sm:inline">지금 동기화</span>
-            <span id="sync-pending-badge" class="hidden absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] font-extrabold flex items-center justify-center">0</span>
-          </button>
-
           <button onclick="exportDataJSON()" title="전체 리뷰 데이터를 JSON 파일로 다운로드합니다." class="px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
             <i class="fa-solid fa-download text-indigo-400 text-[11px]"></i>
             <span class="hidden sm:inline">백업 다운로드</span>
@@ -567,16 +561,6 @@
       editingReviewId: null
     };
 
-    // 충돌 없는 고유 ID 생성기. Date.now()만 쓰면 두 기기에서 같은 밀리초에
-    // 생성된 문서가 서로를 덮어쓸 수 있어, crypto.randomUUID()(지원 안 되는
-    // 구형 브라우저는 랜덤 문자열로 대체)를 함께 사용한다.
-    function generateUniqueId(prefix) {
-      const rand = (typeof crypto !== 'undefined' && crypto.randomUUID)
-        ? crypto.randomUUID()
-        : Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-      return `${prefix}_${Date.now()}_${rand}`;
-    }
-
     const HOT_RECOMMEND_TAGS = ['소년이 온다', '인사이드 아웃 2', '불편한 편의점', '모순', '헤어질 결심', '파묘'];
 
     const INITIAL_SEED_REVIEWS = [
@@ -638,8 +622,7 @@
       renderUserDropdown();
       renderQuickTags();
       updateFeedBadge();
-      updateSyncPendingBadge();
-
+      
       switchTab('search');
       await initFirebaseCloud();
       loadPopularContents();
@@ -668,14 +651,6 @@
         auth = firebase.auth();
         db = firebase.firestore();
 
-        // Firestore 오프라인 캐시(enablePersistence)는 의도적으로 사용하지 않는다.
-        // 이 기능은 카카오톡/인스타그램 등 인앱 브라우저나 모바일 웹뷰에서 IndexedDB
-        // 접근이 제한될 때 실시간 리스너(onSnapshot)가 계속 끊기고 재연결을 반복하는
-        // 원인으로 자주 보고된다. 이 앱은 이미 자체 보류 큐(outbox)로 오프라인 저장을
-        // 처리하므로 enablePersistence 없이도 오프라인 대응이 가능하다.
-
-        // 기존 앱과 동일하게 익명 인증을 시도하되, 인증 실패 때문에 전체 초기화를 중단하지 않는다.
-        // Firestore 규칙이 비인증 접근을 허용하는 프로젝트일 수도 있기 때문이다.
         try {
           await auth.signInAnonymously();
         } catch (authErr) {
@@ -683,429 +658,71 @@
         }
 
         isFirebaseConnected = true;
-        if (cloudStatusText) cloudStatusText.textContent = "🟡 Firebase 연결 준비됨";
-        if (cloudStatusIndicator) cloudStatusIndicator.className = "text-xs text-amber-400 flex items-center gap-1.5 font-bold";
+        if (cloudStatusText) cloudStatusText.textContent = "🟢 Firebase 실시간 클라우드 DB 연결됨";
+        if (cloudStatusIndicator) cloudStatusIndicator.className = "text-xs text-emerald-400 flex items-center gap-1.5 font-bold";
 
         const reviewsCollection = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews');
-        window.__reviewsCollectionRef = reviewsCollection;
-
-        // 중요: 리스너보다 먼저 복구 시드를 클라우드에 반영한다.
-        // 기존 구현은 먼저 23/25개 스냅샷을 state에 덮어쓴 뒤 복구를 시도했기 때문에
-        // 복구가 실패하면 기기마다 다시 서로 다른 개수로 돌아갈 수 있었다.
-        await migrateRecoverySeedToCloud();
-
-        subscribeReviewsListener(reviewsCollection);
-
-        const friendsDoc = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('meta').doc('friends');
-        window.__friendsDocRef = friendsDoc;
-        subscribeFriendsListener(friendsDoc);
-
-        await flushPendingSyncQueue();
-
-      } catch (err) {
-        console.error("Firebase Init fallback:", err);
-        isFirebaseConnected = false;
-        if (cloudStatusText) cloudStatusText.textContent = "🔴 클라우드 연결 실패 · 로컬 데이터 사용 중";
-        if (cloudStatusIndicator) cloudStatusIndicator.className = "text-xs text-rose-400 flex items-center gap-1.5 font-bold";
-      }
-    }
-
-    // ── 실시간 리뷰 구독 (끊기면 자동 재구독) ──────────────────────────
-    let reviewsUnsubscribe = null;
-    let reviewsReconnectTimer = null;
-    let reviewsReconnectAttempts = 0;
-
-    function buildVisibleReviewsFromCloud(cloudReviews) {
-      const byId = new Map();
-      cloudReviews.forEach(r => {
-        if (r && r.id) byId.set(r.id, r);
-      });
-
-      // 복구가 아직 완전히 확인되지 않았다면, 병합 백업을 화면에서도 유지한다.
-      // 서버 스냅샷이 잠시 캐시/지연 상태여도 26개가 다시 23/25개로 줄어들지 않는다.
-      if (!recoveryMigrationComplete) {
-        RECOVERY_SEED_REVIEWS.forEach(r => {
-          if (!byId.has(r.id)) byId.set(r.id, r);
-        });
-      }
-
-      // 이 기기에서 아직 서버에 반영되지 않은 outbox도 화면에서 유지한다.
-      const pending = getPendingQueue();
-      const deletedIds = new Set(pending.filter(p => p.type === 'delete').map(p => p.id));
-
-      deletedIds.forEach(id => byId.delete(id));
-
-      pending.forEach(p => {
-        if ((p.type === 'upsert' || p.type === 'recovery') && p.review && !deletedIds.has(p.id)) {
-          byId.set(p.id, p.review);
-        }
-      });
-
-      return Array.from(byId.values());
-    }
-
-    function applyCloudReviews(cloudReviews) {
-      state.reviews = buildVisibleReviewsFromCloud(cloudReviews);
-
-      let addedNewAuthor = false;
-      state.reviews.forEach(r => {
-        if (r.author && !state.friends.includes(r.author)) {
-          state.friends.push(r.author);
-          addedNewAuthor = true;
-        }
-      });
-
-      saveReviewsToStorage(false);
-      renderUserDropdown();
-      updateFeedBadge();
-
-      if (state.currentTab === 'feed') {
-        renderFeed();
-        displayRandomHeroReview();
-      }
-      if (state.currentTab === 'stats') updateStats();
-
-      if (addedNewAuthor) {
-        syncFriendsToCloud();
-      }
-    }
-
-    function subscribeReviewsListener(reviewsCollection) {
-      const cloudStatusText = document.getElementById('cloud-status-text');
-      const cloudStatusIndicator = document.getElementById('cloud-status-indicator');
-
-      if (reviewsUnsubscribe) {
-        try { reviewsUnsubscribe(); } catch (e) {}
-        reviewsUnsubscribe = null;
-      }
-      if (reviewsReconnectTimer) {
-        clearTimeout(reviewsReconnectTimer);
-        reviewsReconnectTimer = null;
-      }
-
-      reviewsUnsubscribe = reviewsCollection.onSnapshot((snapshot) => {
-        const cloudReviews = [];
-        snapshot.forEach(docSnap => {
-          const data = docSnap.data();
-          if (data) cloudReviews.push({ ...data, id: docSnap.id });
-        });
-
-        // 빈 스냅샷도 정상 상태로 처리한다. 기존 구현은 0개일 때 로컬 state를
-        // 그대로 두어 클라우드와 화면 상태가 서로 달라질 수 있었다.
-        applyCloudReviews(cloudReviews);
-
-        // 정상 스냅샷을 받았으니 재연결 시도 횟수(백오프)를 초기화한다.
-        reviewsReconnectAttempts = 0;
-
-        if (cloudStatusText) cloudStatusText.textContent =
-          snapshot.metadata && snapshot.metadata.fromCache
-            ? "🟡 Firebase 연결됨 · 캐시에서 표시 중"
-            : "🟢 Firebase 실시간 클라우드 DB 연결됨";
-        if (cloudStatusIndicator) cloudStatusIndicator.className =
-          snapshot.metadata && snapshot.metadata.fromCache
-            ? "text-xs text-amber-400 flex items-center gap-1.5 font-bold"
-            : "text-xs text-emerald-400 flex items-center gap-1.5 font-bold";
-
-        // 서버 스냅샷을 받았을 때도 혹시 남아있는 보류 큐를 바로 재시도한다.
-        flushPendingSyncQueue();
-      }, (err) => {
-        // 실제 오류 코드를 콘솔과 토스트에 남긴다. 기존에는 항상 "재연결 시도 중"이라는
-        // 문구만 떠서 permission-denied(보안규칙 문제)인지 unavailable(네트워크 문제)인지
-        // 구분할 수 없었다.
-        console.error("Firestore subscription error:", err && err.code, err);
-        if (cloudStatusText) cloudStatusText.textContent = `🟡 실시간 연결 끊김(${err && err.code || 'unknown'}) · 재연결 시도 중...`;
-        if (cloudStatusIndicator) cloudStatusIndicator.className = "text-xs text-amber-400 flex items-center gap-1.5 font-bold";
-
-        reviewsReconnectAttempts = Math.min(reviewsReconnectAttempts + 1, 6);
-        const backoffMs = Math.min(5000 * Math.pow(2, reviewsReconnectAttempts - 1), 60000);
-
-        if (!reviewsReconnectTimer) {
-          reviewsReconnectTimer = setTimeout(() => {
-            reviewsReconnectTimer = null;
-            if (isFirebaseConnected && window.__reviewsCollectionRef) {
-              subscribeReviewsListener(window.__reviewsCollectionRef);
+        
+        reviewsCollection.onSnapshot((snapshot) => {
+          const cloudReviews = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data && data.author !== '민우') {
+              cloudReviews.push({ ...data, id: docSnap.id });
             }
-          }, backoffMs);
-        }
-      });
-    }
+          });
 
-    function subscribeFriendsListener(friendsDoc) {
-      friendsDoc.onSnapshot((docSnap) => {
-        if (docSnap.exists) {
-          const cloudFriends = docSnap.data().list;
-          if (Array.isArray(cloudFriends) && cloudFriends.length > 0) {
-            cloudFriends.forEach(f => {
-              if (!state.friends.includes(f)) state.friends.push(f);
+          if (cloudReviews.length > 0) {
+            state.reviews = cloudReviews;
+
+            let addedNewAuthor = false;
+            cloudReviews.forEach(r => {
+              if (r.author && r.author !== '민우' && !state.friends.includes(r.author)) {
+                state.friends.push(r.author);
+                addedNewAuthor = true;
+              }
             });
+
             saveReviewsToStorage(false);
             renderUserDropdown();
+            updateFeedBadge();
+
+            if (state.currentTab === 'feed') {
+              renderFeed();
+              displayRandomHeroReview();
+            }
             if (state.currentTab === 'stats') updateStats();
+
+            if (addedNewAuthor) {
+              syncFriendsToCloud();
+            }
           }
-        }
-      }, (err) => {
-        console.warn("Firestore friends subscription warning:", err);
-        setTimeout(() => subscribeFriendsListener(friendsDoc), 5000);
-      });
-    }
-
-    // ── 오프라인/실패 전송 큐 (outbox) ─────────────────────────────────
-    function getPendingQueue() {
-      try {
-        const parsed = JSON.parse(localStorage.getItem('culture_log_pending_sync') || '[]');
-        return Array.isArray(parsed) ? parsed : [];
-      } catch (e) {
-        return [];
-      }
-    }
-
-    function setPendingQueue(queue) {
-      localStorage.setItem('culture_log_pending_sync', JSON.stringify(queue));
-      updateSyncPendingBadge();
-    }
-
-    function queuePendingSync(op) {
-      // 같은 ID에 대한 마지막 작업만 남긴다.
-      const queue = getPendingQueue().filter(q => q.id !== op.id);
-      queue.push(op);
-      setPendingQueue(queue);
-    }
-
-    function updateSyncPendingBadge() {
-      const badge = document.getElementById('sync-pending-badge');
-      if (!badge) return;
-      const count = getPendingQueue().length;
-      if (count > 0) {
-        badge.textContent = count;
-        badge.classList.remove('hidden');
-      } else {
-        badge.classList.add('hidden');
-      }
-    }
-
-    // 이전 버전은 db.batch().create(ref, review)를 사용했는데, WriteBatch.create()는
-    // Firestore 클라이언트(웹) SDK에는 존재하지 않는 메서드다(Admin SDK 전용).
-    // 즉 호출할 때마다 "batch.create is not a function" TypeError가 100% 발생했고,
-    // 이게 "복구 0/26건 완료, 실패한 26건"으로 항상 표시되던 진짜 원인이었다.
-    // 트랜잭션(runTransaction)으로 "문서가 없을 때만 생성"을 안전하게 구현한다.
-    async function commitRecoveryCreate(review) {
-      const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(review.id);
-      return db.runTransaction(async (tx) => {
-        const snap = await tx.get(ref);
-        if (snap.exists) {
-          // 이미 존재하는 리뷰는 절대 덮어쓰지 않는다(댓글/반응 보존).
-          return 'existing';
-        }
-        tx.set(ref, review);
-        return 'created';
-      });
-    }
-
-    async function flushPendingSyncQueue() {
-      if (!isFirebaseConnected || !db) return;
-
-      const queue = getPendingQueue();
-      if (queue.length === 0) return;
-
-      const stillPending = [];
-      for (const op of queue) {
-        try {
-          const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(op.id);
-
-          if (op.type === 'delete') {
-            await ref.delete();
-          } else if (op.type === 'recovery') {
-            // commitRecoveryCreate는 이미 존재하면 'existing'을 반환할 뿐 에러를 던지지 않는다.
-            await commitRecoveryCreate(op.review);
-          } else {
-            await ref.set(op.review, { merge: true });
-          }
-        } catch (err) {
-          console.error("보류 항목 재전송 실패:", op.id, err);
-          stillPending.push(op);
-        }
-      }
-
-      setPendingQueue(stillPending);
-      if (stillPending.length < queue.length) {
-        showToast(`밀려있던 데이터 ${queue.length - stillPending.length}건을 클라우드와 동기화했습니다.`);
-      }
-
-      // outbox가 비워졌다면 스냅샷이 다시 오도록 한 번 렌더링한다.
-      if (window.__reviewsCollectionRef && getPendingQueue().length === 0) {
-        updateSyncPendingBadge();
-      }
-    }
-
-    const RECOVERY_SEED_REVIEWS = [{"id": "review_1789648651389", "workKey": "movie_옵세션", "type": "movie", "title": "옵세션", "subTitle": "2026년 개봉 · TMDB ⭐ 4.1", "coverUrl": "https://image.tmdb.org/t/p/w500/df4rpubfWy0g7HCzBNtPLLKnoMH.jpg", "rating": 4, "oneLiner": "가짜 마음을 탐하지 말라", "detail": "가짜 마음이라도 좋으니 사랑을 가지고 싶었던 사람\n내 마음이 아니라 너의 마음을 들여다보는게 사랑이지", "author": "지영", "createdAt": "2026-09-17T12:37:31.389Z", "reactions": {"like": 0, "heart": 0}, "comments": []}, {"type": "movie", "id": "review_1788587662003", "createdAt": "2026-09-05T05:54:22.003Z", "author": "쵸쵸", "subTitle": "2026년 개봉 · TMDB ⭐ 4.5", "detail": "한소희 이쁨 최민식 연기 잘함\n강태오씨 한소희를 두고 그러면 안되지 바보 똥멍충씨\n디자인팀 유진씨 이야기가 제일 인상적이었음", "rating": 4, "comments": [], "oneLiner": "적당히 잘 각색한 리메이크 영화", "title": "인턴", "reactions": {"like": 0, "heart": 0}, "workKey": "movie_인턴", "coverUrl": "https://image.tmdb.org/t/p/w500/kRHjgsICPISgEClloeARkPHP96M.jpg"}, {"detail": "우당탕탕 가족 소동극에서 처절한 삶의 회복으로 가기까지", "rating": 4, "workKey": "movie_경주기행", "author": "쵸쵸", "oneLiner": "엄마라서 딸이라서 가족이라서", "createdAt": "2026-09-05T05:50:29.284Z", "title": "경주기행", "coverUrl": "https://image.tmdb.org/t/p/w500/2dAd2APyFUyJ6qEv9VFHdHQtQI6.jpg", "type": "movie", "subTitle": "2026년 개봉 · TMDB ⭐ 4.5", "reactions": {"like": 0, "heart": 0}, "comments": [], "id": "review_1788587429284"}, {"createdAt": "2026-09-02T12:57:04.404Z", "subTitle": "연여름 · 현대문학", "type": "book", "id": "review_1788353824404", "comments": [], "rating": 3, "detail": "AI랑 싸우고 전쟁하는거만 보다가 회색 AI를 보니 신기했다. 결국 인간과 인간이 아님을 명확히 구분짓는건 ‘자유의지’", "author": "우니", "reactions": {"like": 0, "heart": 0}, "workKey": "book_부적격자의 차트", "oneLiner": "하얀 디스토피아", "title": "부적격자의 차트", "coverUrl": "https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=http%3A%2F%2Ft1.daumcdn.net%2Flbook%2Fimage%2F6815266%3Ftimestamp%3D20260321123657"}, {"createdAt": "2026-09-02T12:48:17.935Z", "type": "book", "updatedAt": "2026-09-02T12:48:45.615Z", "author": "우니", "reactions": {"like": 0, "heart": 0}, "rating": 3.5, "title": "사랑의 갈증", "subTitle": "미시마 유키오 · 빛소굴", "oneLiner": "마님은 왜 돌쇠에게 양말을 주었나", "comments": [], "workKey": "book_사랑의 갈증", "coverUrl": "https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=http%3A%2F%2Ft1.daumcdn.net%2Flbook%2Fimage%2F6668755%3Ftimestamp%3D20260826144720", "id": "review_1788353297935", "detail": "너무 야해서 회사에서 읽다가 오해를 살뻔"}, {"id": "review_1788353225438", "rating": 3.5, "comments": [], "oneLiner": "엄마는 항상 미안해하는 사람 엄미새는 울어요", "subTitle": "2026년 개봉 · TMDB ⭐ 4.5", "coverUrl": "https://image.tmdb.org/t/p/w500/2dAd2APyFUyJ6qEv9VFHdHQtQI6.jpg", "title": "경주기행", "reactions": {"like": 0, "heart": 0}, "detail": "아따마 배우들 연기가 다 살발하다 살발해", "type": "movie", "createdAt": "2026-09-02T12:47:05.438Z", "author": "우니", "workKey": "movie_경주기행", "updatedAt": "2026-09-02T12:47:47.988Z"}, {"detail": "", "createdAt": "2026-09-02T12:46:41.692Z", "id": "review_1788353201692", "rating": 5, "coverUrl": "https://image.tmdb.org/t/p/w500/8ze9OcVuFiy94s6FFPvsn4oC2e1.jpg", "comments": [], "subTitle": "2026년 개봉 · TMDB ⭐ 4.0", "oneLiner": "왜 모든걸 혼자서 짊어지려하나 신도 아니면서", "title": "오디세이", "type": "movie", "author": "우니", "workKey": "movie_오디세이", "reactions": {"like": 0, "heart": 0}}, {"comments": [], "oneLiner": "귀하게 자란 내가 이딴걸 봤다니", "subTitle": "2026년 개봉 · TMDB ⭐ 3.2", "author": "우니", "createdAt": "2026-09-02T12:41:21.639Z", "coverUrl": "https://image.tmdb.org/t/p/w500/oGqJr59UAwZfpmSkEkaW02o0ZLC.jpg", "updatedAt": "2026-09-02T12:41:58.791Z", "detail": "그래도 나름 공룡에 털도 달아줬어 고증 잘했어", "title": "오크 스트리트의 마지막 날", "id": "review_1788352881639", "reactions": {"like": 0, "heart": 0}, "type": "movie", "workKey": "movie_오크 스트리트의 마지막 날", "rating": 2}, {"workKey": "movie_옵세션", "updatedAt": "2026-09-02T12:47:48.626Z", "author": "우니", "createdAt": "2026-09-02T12:37:14.263Z", "type": "movie", "title": "옵세션", "detail": "니키가 미췬년이니 베어가 강간범이니", "coverUrl": "https://image.tmdb.org/t/p/w500/df4rpubfWy0g7HCzBNtPLLKnoMH.jpg", "reactions": {"heart": 0, "like": 0}, "subTitle": "2026년 개봉 · TMDB ⭐ 4.1", "id": "review_1788352634263", "oneLiner": "물건 살때 설명서 잘 읽고 학생 때 공부를 좀 잘해놓자", "comments": [], "rating": 3}, {"rating": 5, "detail": "함께 있을 때만 견뎌지는 결여가 있는데, 없음은 더이상 없어질 수 없으므로.\n우리가 무엇을 갖고 있지 않은지가 중요한 사랑의 세계", "type": "book", "createdAt": "2026-09-02T11:39:29.959Z", "coverUrl": "https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=http%3A%2F%2Ft1.daumcdn.net%2Flbook%2Fimage%2F841455%3Ftimestamp%3D20260623110725", "title": "정확한 사랑의 실험", "comments": [], "workKey": "book_정확한 사랑의 실험", "subTitle": "신형철 · 마음산책", "oneLiner": "나의 '없음'과 너의 '없음'이 서로를 알아볼 때", "author": "지영", "id": "review_1788349169959", "reactions": {"like": 0, "heart": 0}}, {"author": "밤토리", "id": "review_1788332829626", "workKey": "book_삶의 발명", "createdAt": "2026-09-02T07:07:09.626Z", "coverUrl": "https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=http%3A%2F%2Ft1.daumcdn.net%2Flbook%2Fimage%2F7087398%3Ftimestamp%3D20260421121855", "comments": [{"id": "c_1788348056593", "author": "지영", "text": "밤토리님 책 선택하는 폭이 넓으세요", "createdAt": "2026-09-02T11:20:56.593Z"}], "subTitle": "정혜윤 · 녹스", "oneLiner": "새로운 이야기로 나아가고 싶다..!", "type": "book", "detail": "", "reactions": {"like": 0, "heart": 0}, "title": "삶의 발명", "rating": 4}, {"type": "book", "createdAt": "2026-08-30T06:50:17.281Z", "rating": 3, "detail": "내가 품기엔 너무 어렵고 심오한 책.. 헤세 철학의 정수를 보려다가 고문의 독서시간이 되어버림ㅠ \n후반부를 읽다가 이 책을 추천해 준 학생(자살 의지가 높은)이 생각나 먹먹했던 책,, 너무나 허무하고 유희로 가득 찬 순환의 삶 속에서 그럼에도 불구하고 살아가고 있는 이유가 이 결말 때문이었을까,, 나는 왜 살아야 하는가", "reactions": {"like": 0, "heart": 0}, "workKey": "book_유리알 유희 2", "title": "유리알 유희 2", "coverUrl": "https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=http%3A%2F%2Ft1.daumcdn.net%2Flbook%2Fimage%2F541027%3Ftimestamp%3D20260307110835", "id": "review_1788072617281", "subTitle": "헤르만 헤세 · 민음사", "oneLiner": "가벼운 마음으로 책장을 넘기지 마세요ㅠ", "comments": [{"id": "c_1788348129437", "author": "지영", "text": "엄청 심오하네.. 무슨 책이든 끝까지 읽어야해서 고문이라고 느꼈구나..", "createdAt": "2026-09-02T11:22:09.437Z"}], "author": "밤토리"}, {"createdAt": "2026-08-28T14:08:36.195Z", "detail": "혼자 신을 미워했다가 저주받아서 찡찡거리다가 온갖데 다 들쑤셔놓고 혼자 구원받고 사라짐 남은 사람은 뭐가 됨??? 오조오억명 죽이고 이용하고 처음부터 끝까지 이기적임", "id": "review_1787926116194", "title": "드라큘라: 러브 테일", "rating": 2.5, "workKey": "movie_드라큘라: 러브 테일", "reactions": {"like": 0, "heart": 0}, "coverUrl": "https://image.tmdb.org/t/p/w500/3mNCAoWAOHUYaY1VxOCqKC3v8n3.jpg", "subTitle": "2025년 개봉 · TMDB ⭐ 3.6", "oneLiner": "드라큘라씨 너무 이기적이세요", "comments": [], "author": "쵸쵸", "type": "movie"}, {"workKey": "movie_오크 스트리트의 마지막 날", "coverUrl": "https://image.tmdb.org/t/p/w500/oGqJr59UAwZfpmSkEkaW02o0ZLC.jpg", "type": "movie", "oneLiner": "헐리웃판 호프 우당탕탕 공룡마을 탈출 대작전", "subTitle": "2026년 개봉 · TMDB ⭐ 3.2", "comments": [{"id": "c_1788348245610", "author": "지영", "text": "얼빠라서 보신거죠,,", "createdAt": "2026-09-02T11:24:05.610Z"}], "author": "쵸쵸", "title": "오크 스트리트의 마지막 날", "reactions": {"like": 0, "heart": 0}, "id": "review_1787925838661", "detail": "호프보다 덜 띠용이고 꼬질해지는 앤헤서웨이언니 이뻐요", "rating": 3.5, "createdAt": "2026-08-28T14:03:58.661Z"}, {"id": "review_1786840088136", "updatedAt": "2026-08-16T00:29:06.992Z", "author": "지영", "createdAt": "2026-08-16T00:28:08.136Z", "type": "movie", "comments": [], "detail": "100% 완벽한 인간은 없다. \n언제나 모순적인 행동을 하는게 인간이지만\n그걸 깨닫는 인간과 모르고 살아가는 인간이 같은 인간일 수 없겠지.\n사실은 전쟁 영웅이 아니라 학살자에 가까웠다는 메타 인지를 하는 과정을 그리며\n연기, 연출, 촬영, 음악.. 뭐 하나 빠지는 거 없이 완벽한 영화였다.. 증말..\n\n제우스의 법에 따라 차별과 혐오를 멈추고 환대하자는 영화의 메세지가\n\"사람, 장소, 환대\"라는 책을 떠올리게도 했다.\n\n놀란 감독의 영화가 항상 내 취향인건 아닌데, 그리스 로마 신화를 좋아하지도 않는데, \n이 영화 만큼은 변태같은 고집스런 영감탱이 존경스럽게 느껴졌다.", "oneLiner": "깨닫는 인간의 아름다움", "subTitle": "2026년 개봉 · TMDB ⭐ 4.0", "title": "오디세이", "coverUrl": "https://image.tmdb.org/t/p/w500/8ze9OcVuFiy94s6FFPvsn4oC2e1.jpg", "reactions": {"like": 0, "heart": 0}, "workKey": "movie_오디세이", "rating": 4.5}, {"createdAt": "2026-08-15T07:35:03.466Z", "type": "movie", "author": "혀나", "oneLiner": "B급감성 애호가 광인에겐 극호인 영화", "subTitle": "2026년 개봉 · TMDB ⭐ 4.0", "comments": [{"id": "c_1788348168450", "author": "지영", "text": "ㅋㅋㅋㅋㅋㅋ 광인 중의 광인..", "createdAt": "2026-09-02T11:22:48.450Z"}], "coverUrl": "https://image.tmdb.org/t/p/w500/ptqlN6mDIAqJjVA86J5eOoG82zc.jpg", "reactions": {"like": 0, "heart": 0}, "rating": 4, "workKey": "movie_호프", "detail": "", "title": "호프", "id": "review_1786779303466"}, {"author": "M", "coverUrl": "https://image.tmdb.org/t/p/w500/ptqlN6mDIAqJjVA86J5eOoG82zc.jpg", "workKey": "movie_호프", "comments": [], "oneLiner": "정수리냄새 같은 영화", "subTitle": "2026년 개봉 · TMDB ⭐ 4.0", "createdAt": "2026-08-11T13:03:37.594Z", "detail": "연출은 좋은데 대본이 너무 구림. 재치있고싶어서 안달난 부장님이 쓰신것 같음. 근데 2편 나오면 궁금해서 보러갈 것 같은게 구리면서 묘한 중독성이 있음. DMZ 근처에 저정도 규모 비행선 냅다 꽂히면 다음날 미군 쫙 깔릴것 같은데 어떻게 수습할지도 너무 궁금함", "title": "호프", "reactions": {"like": 0, "heart": 0}, "type": "movie", "id": "review_1786453417594", "rating": 2}, {"coverUrl": "https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=http%3A%2F%2Ft1.daumcdn.net%2Flbook%2Fimage%2F521533%3Ftimestamp%3D20260106110936", "detail": "근데 주인공인 사카니시군,,, 전형적인 하루키 소설 속 남주 같음ㅎㅎ", "type": "book", "workKey": "book_여름은 오래 그곳에 남아", "comments": [], "oneLiner": "총천연색 여름의 결정체", "subTitle": "마쓰이에 마사시 · 비채", "rating": 4, "reactions": {"like": 0, "heart": 0}, "title": "여름은 오래 그곳에 남아", "id": "review_1786450638541", "author": "몽돌", "createdAt": "2026-08-11T12:17:18.541Z"}, {"detail": "", "workKey": "book_나의 완벽한 장례식", "title": "나의 완벽한 장례식", "rating": 2.5, "reactions": {"like": 0, "heart": 0}, "subTitle": "조현선 · 북로망스", "oneLiner": "불편한 편의점 같애..(그책보단 살짝 더 나음)", "comments": [], "type": "book", "author": "효", "coverUrl": "https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=http%3A%2F%2Ft1.daumcdn.net%2Flbook%2Fimage%2F7123816%3Ftimestamp%3D20260501123835", "id": "review_1786369367391", "createdAt": "2026-08-10T13:42:47.391Z"}, {"author": "새리", "id": "review_1786369031399", "workKey": "movie_호프", "createdAt": "2026-08-10T13:37:11.399Z", "coverUrl": "https://image.tmdb.org/t/p/w500/ptqlN6mDIAqJjVA86J5eOoG82zc.jpg", "comments": [], "oneLiner": "\"칼리야 하고 불렀다,,,\"", "subTitle": "2026년 개봉 · TMDB ⭐ 4.0", "type": "movie", "detail": "", "reactions": {"like": 0, "heart": 0}, "title": "호프", "rating": 2}, {"author": "새리", "coverUrl": "https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=http%3A%2F%2Ft1.daumcdn.net%2Flbook%2Fimage%2F532683%3Ftimestamp%3D20260728110737", "workKey": "book_소년이 온다", "comments": [], "oneLiner": "상처를 증언하는 고결한 방법", "subTitle": "한강 · 창비", "createdAt": "2026-08-10T13:26:33.273Z", "detail": "찢겨나갈 만큼 상처 받더라도 지키고 싶은 대의가 있나요?", "title": "소년이 온다", "reactions": {"like": 0, "heart": 0}, "type": "book", "id": "review_1786368393272", "rating": 5}, {"id": "review_1786364821238", "createdAt": "2026-08-10T12:27:01.238Z", "author": "쵸쵸", "type": "movie", "title": "스파이더맨: 브랜드 뉴 데이", "coverUrl": "https://image.tmdb.org/t/p/w500/78eMFkcvlPcfWCe1GNgNiBpFIDz.jpg", "workKey": "movie_스파이더맨: 브랜드 뉴 데이", "oneLiner": "마블놈들 영화 잘 만드네 츠암나", "subTitle": "2026년 개봉 · TMDB ⭐ 3.9", "rating": 4, "comments": [], "reactions": {"like": 0, "heart": 0}, "detail": "나타샤를 살려내라 이 마블놈들아"}, {"comments": [{"id": "c_1786365297374", "author": "지영", "text": "ㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋ졸라 긴 악플러다 ㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋ", "createdAt": "2026-08-10T12:34:57.374Z"}], "rating": 3.5, "subTitle": "2026년 개봉 · TMDB ⭐ 4.0", "oneLiner": "3천조(아님) 투자받아서 하고 싶은 거 다 하는 나홍진 부럽다", "coverUrl": "https://image.tmdb.org/t/p/w500/ptqlN6mDIAqJjVA86J5eOoG82zc.jpg", "title": "호프", "reactions": {"like": 0, "heart": 0}, "detail": "상업영화 멋지고 재밌게 만든거 알겠어요 알겠는데... 찝찝하게 재미있게 만들어버리는 묘한 재주가 있으셔요\n외계인 올 수 있지, 외계인이랑 치고박고 싸울 수 있지, 외계인이랑 눈 마주치고 짠함 느낄 수 있지\n근데 개연성 다 말아먹고 대놓고 그건 중요한게 아니라고 그러면 뭣이 중헌디 뭣이 중허냐고\n오빠 멋져요 왤케 잘생겼어 그래버리면 너무 조인성하는 거잖아요 몰입이 와장창 깨져버렸답니다\n대사가 좀 짜쳐서 흥이 다 깨져버렸잖아 나홍진 책임져\n엔딩도 지구가 터지게 만들어놓고선 호프~ 이지랄\n외계인입장에서 호프~ 지구인입장에서도 호프~ 이지랄\n외계인을 뭐 홍보사에서 협의없이 풀어버린거 마냥 입터시던데 예 그럼 본인 영화에 대해 그렇게 권한이 없으신가봐요 여러모로 짜치는데 또 다음영화도 그렇게 투자받아서 또 하고싶은거 마음대로 하시겠죠 예예", "type": "movie", "id": "review_1786364470523", "createdAt": "2026-08-10T12:21:10.524Z", "author": "쵸쵸", "workKey": "movie_호프", "updatedAt": "2026-08-10T12:24:02.862Z"}, {"rating": 5, "reactions": {"like": 0, "heart": 0}, "detail": "", "createdAt": "2026-08-10T12:17:21.233Z", "type": "movie", "title": "스파이더맨: 브랜드 뉴 데이", "workKey": "movie_스파이더맨: 브랜드 뉴 데이", "coverUrl": "https://image.tmdb.org/t/p/w500/78eMFkcvlPcfWCe1GNgNiBpFIDz.jpg", "author": "해정~", "id": "review_1786364241233", "comments": [{"id": "c_1786365324159", "author": "지영", "text": "나 안봤는데 왜 고졸이가", "createdAt": "2026-08-10T12:35:24.159Z"}], "oneLiner": "피터를 대학에 보내라 우우우", "subTitle": "2026년 개봉 · TMDB ⭐ 3.9"}, {"createdAt": "2026-08-10T11:22:00.819Z", "detail": "주인공 스토너는 주변 시련을 버텨낸 불쌍한 존재일까요?! 아님 자신의 신념대로 살아간 부러운 존재일까요?!", "id": "review_1786360920819", "title": "스토너(초판본)", "rating": 5, "workKey": "book_스토너(초판본)", "reactions": {"like": 0, "heart": 0}, "coverUrl": "https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=http%3A%2F%2Ft1.daumcdn.net%2Flbook%2Fimage%2F5402865%3Ftimestamp%3D20250308142040", "subTitle": "존 윌리엄스 · 알에이치코리아", "oneLiner": "한 사람의 일대기를 다 훑어본.. 오랜만의 대서사시", "author": "밤토리", "comments": [], "type": "book"}, {"workKey": "movie_호프", "reactions": {"like": 0, "heart": 0}, "coverUrl": "https://image.tmdb.org/t/p/w500/ptqlN6mDIAqJjVA86J5eOoG82zc.jpg", "author": "지영", "type": "movie", "title": "호프", "subTitle": "2026년 개봉 · TMDB ⭐ 4.0", "oneLiner": "알맹이 없는 영화에 돈 함부로 쓰네", "comments": [], "updatedAt": "2026-08-10T11:33:37.293Z", "id": "review_1786360489868", "rating": 2.5, "createdAt": "2026-08-10T11:14:49.868Z", "detail": "당신은 호? 불호?"}];
-
-    // ── 병합 백업 시드를 이용한 1회성 클라우드 복구 마이그레이션 ────────────
-    // v2에서는 "먼저 서버 전체를 읽고 없는 ID만 set"하지 않는다.
-    // 그 방식은 source:'server'가 네트워크/Firestore 상태에 따라 실패하고,
-    // 실패 시 26개 복구 자체가 시작되지 않는 것이 핵심 문제였다.
-    //
-    // 대신 각 문서를 트랜잭션으로 "없을 때만 생성"한다(commitRecoveryCreate 참고).
-    // - 이미 존재: 트랜잭션이 'existing' 반환 → 그대로 보존
-    // - 없음: 트랜잭션이 'created' 반환하며 새로 생성
-    // - 네트워크/권한 실패: outbox에 남겨 재시도
-    //
-    // v3: 이전 버전은 batch.create()가 웹 SDK에 존재하지 않아 26건이 전부
-    // TypeError로 실패했었다. 버전을 올려 그 시점에 쌓인 오래된 outbox 항목과
-    // 무관하게 항상 한 번은 깨끗하게 재검증하도록 한다.
-    const RECOVERY_SEED_VERSION = 'v3';
-    let recoveryMigrationComplete = false;
-    let recoveryMigrationPromise = null;
-
-    async function migrateRecoverySeedToCloud() {
-      if (!isFirebaseConnected || !db) {
-        recoveryMigrationComplete = false;
-        return { completed: false, created: 0, existing: 0, failed: RECOVERY_SEED_REVIEWS.length };
-      }
-
-      if (localStorage.getItem(`culture_log_recovery_migrated_${RECOVERY_SEED_VERSION}`) === 'true') {
-        recoveryMigrationComplete = true;
-        return { completed: true, created: 0, existing: RECOVERY_SEED_REVIEWS.length, failed: 0 };
-      }
-
-      if (recoveryMigrationPromise) return recoveryMigrationPromise;
-
-      recoveryMigrationPromise = (async () => {
-        let created = 0;
-        let existing = 0;
-        let failed = 0;
-
-        // 이전 버전(v1, v2)의 잘못된 완료 플래그와 그 시점에 쌓인 낡은 outbox 항목을
-        // 정리하고 v3 기준으로 다시 검증한다.
-        localStorage.removeItem('culture_log_recovery_migrated_v1');
-        localStorage.removeItem('culture_log_recovery_migrated_v2');
-        setPendingQueue(getPendingQueue().filter(op => op.type !== 'recovery'));
-
-        const results = await Promise.all(RECOVERY_SEED_REVIEWS.map(async (review) => {
-          try {
-            // commitRecoveryCreate가 직접 'created' 또는 'existing'을 반환한다.
-            return await commitRecoveryCreate(review);
-          } catch (err) {
-            console.error("복구 시드 업로드 실패:", review.id, err && err.code, err);
-            queuePendingSync({ type: 'recovery', id: review.id, review });
-            return 'failed';
-          }
-        }));
-
-        results.forEach(result => {
-          if (result === 'created') created++;
-          else if (result === 'existing') existing++;
-          else failed++;
+        }, (err) => {
+          console.warn("Firestore subscription warning:", err);
         });
 
-        // 네트워크가 잠시 불안정해도 화면에서는 병합 백업을 즉시 보존한다.
-        const localMap = new Map(state.reviews.map(r => [r.id, r]));
-        const pendingDeletes = new Set(getPendingQueue().filter(p => p.type === 'delete').map(p => p.id));
-        RECOVERY_SEED_REVIEWS.forEach(review => {
-          if (!pendingDeletes.has(review.id) && !localMap.has(review.id)) {
-            localMap.set(review.id, review);
+        // Sync friends list from Firebase Cloud
+        const friendsDoc = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('meta').doc('friends');
+        friendsDoc.onSnapshot((docSnap) => {
+          if (docSnap.exists) {
+            const cloudFriends = docSnap.data().list;
+            if (Array.isArray(cloudFriends) && cloudFriends.length > 0) {
+              const cleaned = cloudFriends.filter(f => f !== '민우');
+              cleaned.forEach(f => {
+                if (!state.friends.includes(f)) state.friends.push(f);
+              });
+              saveReviewsToStorage(false);
+              renderUserDropdown();
+              if (state.currentTab === 'stats') updateStats();
+            }
           }
         });
-        state.reviews = Array.from(localMap.values());
-        updateFeedBadge();
-        saveReviewsToStorage(false);
 
-        if (failed === 0) {
-          recoveryMigrationComplete = true;
-          localStorage.setItem(`culture_log_recovery_migrated_${RECOVERY_SEED_VERSION}`, 'true');
-          if (created > 0) {
-            showToast(`누락 복구 완료: ${created}건을 클라우드에 추가했습니다. 현재 복구 기준 ${RECOVERY_SEED_REVIEWS.length}개입니다.`);
-          }
-        } else {
-          recoveryMigrationComplete = false;
-          localStorage.removeItem(`culture_log_recovery_migrated_${RECOVERY_SEED_VERSION}`);
-          showToast(`복구 ${RECOVERY_SEED_REVIEWS.length - failed}/${RECOVERY_SEED_REVIEWS.length}건 완료 · 실패한 ${failed}건은 자동 재시도합니다.`);
-        }
-
-        renderUserDropdown();
-        renderFeed();
-        displayRandomHeroReview();
-        if (state.currentTab === 'stats') updateStats();
-
-        return { completed: failed === 0, created, existing, failed };
-      })().finally(() => {
-        recoveryMigrationPromise = null;
-      });
-
-      return recoveryMigrationPromise;
-    }
-
-    // ── 수동 강제 재동기화 ─────────────────────────────────────────────
-    // source:'server'를 사용하지 않는다. 그것은 "지금 당장 서버 응답이 없으면 실패"
-    //하는 API라서 사용자에게 불필요한 네트워크 실패 토스트를 보여주고 복구도 막았다.
-    async function forceResync() {
-      if (!isFirebaseConnected || !db) {
-        showToast("클라우드 SDK가 아직 준비되지 않았습니다. 잠시 후 다시 눌러주세요.");
-        return;
-      }
-
-      showToast("클라우드 복구 및 동기화 중...");
-
-      try {
-        await migrateRecoverySeedToCloud();
-        await flushPendingSyncQueue();
-
-        // 일반 get()은 캐시/서버 어느 쪽이든 사용 가능하다.
-        // fromCache인 경우에도 이미 복구 시드/outbox를 화면에 유지하므로
-        // 23/25개로 되돌아가는 현상을 막는다.
-        const reviewsCollection = window.__reviewsCollectionRef ||
-          db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews');
-
-        const snapshot = await reviewsCollection.get();
-        const cloudReviews = [];
-        snapshot.forEach(docSnap => cloudReviews.push({ ...docSnap.data(), id: docSnap.id }));
-
-        applyCloudReviews(cloudReviews);
-
-        const pendingCount = getPendingQueue().length;
-        if (pendingCount === 0 && recoveryMigrationComplete) {
-          showToast(`동기화 완료! 현재 총 ${state.reviews.length}개의 리뷰가 있습니다.`);
-        } else {
-          showToast(`동기화 대기 중입니다. 현재 화면에는 ${state.reviews.length}개를 유지하며 연결 복구 시 자동 재시도합니다.`);
-        }
       } catch (err) {
-        console.error("강제 재동기화 실패:", err);
-        // 실패해도 로컬의 26개 복구 기준 데이터는 유지한다.
-        mergeRecoverySeedIntoLocalState();
-        showToast(`클라우드 연결이 아직 불안정합니다. 로컬 ${state.reviews.length}개를 유지하고 자동 재시도합니다.`);
+        console.warn("Firebase Init fallback:", err);
+        if (cloudStatusText) cloudStatusText.textContent = "로컬 저장소 동기화 중";
       }
     }
-
-    function mergeRecoverySeedIntoLocalState() {
-      const map = new Map(state.reviews.map(r => [r.id, r]));
-      const pendingDeletes = new Set(getPendingQueue().filter(p => p.type === 'delete').map(p => p.id));
-      if (!recoveryMigrationComplete) {
-        RECOVERY_SEED_REVIEWS.forEach(review => {
-          if (!pendingDeletes.has(review.id) && !map.has(review.id)) {
-            map.set(review.id, review);
-          }
-        });
-      }
-      state.reviews = Array.from(map.values());
-      saveReviewsToStorage(false);
-      updateFeedBadge();
-      if (state.currentTab === 'feed') renderFeed();
-      if (state.currentTab === 'stats') updateStats();
-    }
-
-    // 온라인 복귀 시 복구/보류 큐를 모두 재전송한다.
-    let onlineSyncRunning = false;
-    window.addEventListener('online', async () => {
-      if (onlineSyncRunning) return;
-      onlineSyncRunning = true;
-      try {
-        showToast("네트워크가 연결되었습니다. 누락 데이터 동기화를 재시도합니다.");
-        await migrateRecoverySeedToCloud();
-        await flushPendingSyncQueue();
-      } finally {
-        onlineSyncRunning = false;
-      }
-    });
-
 
     async function syncFriendsToCloud() {
       if (!isFirebaseConnected || !db) return;
@@ -1122,7 +739,12 @@
       const stored = localStorage.getItem('culture_log_reviews');
       if (stored) {
         try {
-          state.reviews = JSON.parse(stored);
+          let parsed = JSON.parse(stored);
+          parsed = parsed.filter(r => r.author !== '민우');
+          parsed.forEach(r => {
+            if (r.comments) r.comments = r.comments.filter(c => c.author !== '민우');
+          });
+          state.reviews = parsed;
         } catch (e) {
           state.reviews = INITIAL_SEED_REVIEWS;
         }
@@ -1136,7 +758,8 @@
         try {
           const parsed = JSON.parse(storedFriends);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            state.friends = parsed.includes('지영') ? parsed : ['지영', ...parsed];
+            const cleaned = parsed.filter(f => f !== '민우');
+            state.friends = cleaned.includes('지영') ? cleaned : ['지영', ...cleaned];
           } else {
             state.friends = ['지영', '수현'];
           }
@@ -1146,42 +769,27 @@
       } else {
         state.friends = ['지영', '수현'];
       }
+
+      if (state.activeUser === '민우') {
+        state.activeUser = '지영';
+      }
     }
 
     async function syncReviewToCloud(reviewObj) {
-      if (!isFirebaseConnected || !db) {
-        // 오프라인/미연결 상태 → 나중에 재전송할 수 있도록 보류 큐에 저장
-        queuePendingSync({ type: 'upsert', id: reviewObj.id, review: reviewObj });
-        showToast("⚠️ 지금은 클라우드에 연결되어 있지 않아요. 연결되면 자동으로 다시 저장됩니다.");
-        return false;
-      }
+      if (!isFirebaseConnected || !db) return;
       try {
-        // merge:true → 리뷰 문서를 통째로 덮어쓰지 않고 필드 단위로 병합해서,
-        // 다른 기기가 거의 동시에 댓글/반응을 갱신해도 서로 지워지지 않게 한다.
-        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(reviewObj.id).set(reviewObj, { merge: true });
-        return true;
+        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(reviewObj.id).set(reviewObj);
       } catch (err) {
         console.error("Firestore sync error:", err);
-        queuePendingSync({ type: 'upsert', id: reviewObj.id, review: reviewObj });
-        showToast("⚠️ 클라우드 저장에 실패했어요. 연결이 복구되면 자동으로 재시도합니다.");
-        return false;
       }
     }
 
     async function deleteReviewFromCloud(reviewId) {
-      if (!isFirebaseConnected || !db) {
-        queuePendingSync({ type: 'delete', id: reviewId });
-        showToast("⚠️ 지금은 클라우드에 연결되어 있지 않아요. 연결되면 자동으로 삭제가 반영됩니다.");
-        return false;
-      }
+      if (!isFirebaseConnected || !db) return;
       try {
         await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(reviewId).delete();
-        return true;
       } catch (err) {
         console.error("Firestore delete error:", err);
-        queuePendingSync({ type: 'delete', id: reviewId });
-        showToast("⚠️ 클라우드 삭제에 실패했어요. 연결이 복구되면 자동으로 재시도합니다.");
-        return false;
       }
     }
 
@@ -1686,6 +1294,10 @@
         "새로운 작성자(친구)의 이름을 입력하세요...",
         (name) => {
           const cleanName = name.trim();
+          if (cleanName === '민우') {
+            showToast("'민우'는 등록할 수 없는 이름입니다.");
+            return;
+          }
           if (!state.friends.includes(cleanName)) {
             state.friends.push(cleanName);
             state.activeUser = cleanName;
@@ -1887,7 +1499,7 @@
         const workKey = state.activeSearchItem.workKey || `${state.activeSearchItem.type}_${state.activeSearchItem.title.trim()}`;
 
         const newReview = {
-          id: generateUniqueId('review'),
+          id: 'review_' + Date.now(),
           workKey: workKey,
           type: state.activeSearchItem.type,
           title: state.activeSearchItem.title,
@@ -2269,7 +1881,7 @@
         if (!review.comments) review.comments = [];
         
         review.comments.push({
-          id: generateUniqueId('c'),
+          id: 'c_' + Date.now(),
           author: state.activeUser,
           text: text,
           createdAt: new Date().toISOString()
