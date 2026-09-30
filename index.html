@@ -450,7 +450,7 @@
             <span class="text-[11px] text-slate-500">등록 즉시 전체 피드에 반영됩니다.</span>
           </div>
           <div class="relative">
-            <select id="review-author-select" class="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-indigo-400 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <select id="review-author-select" onchange="handleReviewAuthorChange(this)" class="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-indigo-400 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </select>
           </div>
         </div>
@@ -1904,13 +1904,31 @@
       document.getElementById('user-dropdown').classList.toggle('hidden');
     }
 
-    function setActiveUser(name) {
+    function setActiveUser(name, options = {}) {
       if (!state.friends.includes(name)) return;
       state.activeUser = name;
       renderUserDropdown();
-      toggleUserMenu();
+
+      // 감상평 작성 모달이 이미 열려 있어도 상단 작성자 선택과
+      // 모달 안 작성자 선택을 항상 같은 값으로 동기화합니다.
+      const authorSelect = document.getElementById('review-author-select');
+      if (authorSelect && !state.editingReviewId) {
+        authorSelect.value = name;
+      }
+
+      if (options.closeMenu !== false) {
+        const menu = document.getElementById('user-dropdown');
+        if (menu && !menu.classList.contains('hidden')) menu.classList.add('hidden');
+      }
       if (state.currentTab === 'feed') renderFeed();
-      showToast(`작성자 계정이 '${name}'(으)로 설정되었습니다.`);
+      if (options.toast !== false) showToast(`작성자 계정이 '${name}'(으)로 설정되었습니다.`);
+    }
+
+    function handleReviewAuthorChange(selectEl) {
+      const name = (selectEl?.value || '').trim();
+      if (!name) return;
+      // 모달에서 작성자를 나중에 선택해도 상단 선택 상태와 동일하게 만듭니다.
+      setActiveUser(name, { closeMenu: false, toast: false });
     }
 
     function promptAddFriend() {
@@ -2095,27 +2113,49 @@
       e.preventDefault();
       if (!state.activeSearchItem) return;
 
+      // 빠른 연속 클릭/엔터로 같은 감상평이 두 번 저장되지 않도록 잠급니다.
+      if (state.savingReview) return;
+
       const oneLiner = document.getElementById('review-one-liner').value.trim();
       const detail = document.getElementById('review-detail').value.trim();
       const authorSelect = document.getElementById('review-author-select');
       const selectedAuthor = authorSelect ? authorSelect.value.trim() : '';
 
-      if (!state.activeUser) {
-        showToast('먼저 상단에서 작성자를 선택해주세요.');
+      // 작성자는 '입력 시작 전'이 아니라 '최종 저장 전'에 선택되어 있으면 됩니다.
+      // 따라서 작품을 먼저 선택하고 감상평을 작성한 뒤 작성자를 선택하는 흐름도 허용합니다.
+      if (!selectedAuthor) {
+        showToast('감상평을 저장하기 전에 작성자를 선택해주세요.');
         if (authorSelect) authorSelect.focus();
         return;
       }
-      if (!selectedAuthor || selectedAuthor !== state.activeUser) {
-        showToast(`작성자 선택이 일치하지 않습니다. 현재 선택된 '${state.activeUser}'로 작성해주세요.`);
-        if (authorSelect) authorSelect.focus();
-        return;
+      if (!state.activeUser || selectedAuthor !== state.activeUser) {
+        // 모달 작성자 선택이 최신 값이면 이를 최종 작성자로 사용합니다.
+        // setActiveUser가 정상적으로 동기화하지 못한 경우에도 저장 흐름이 막히지 않도록 합니다.
+        if (state.friends.includes(selectedAuthor)) {
+          state.activeUser = selectedAuthor;
+          renderUserDropdown();
+        } else {
+          showToast('등록된 친구 목록에서 작성자를 선택해주세요.');
+          if (authorSelect) authorSelect.focus();
+          return;
+        }
       }
       if (!oneLiner) {
         showToast("한줄평을 작성해주세요!");
         return;
       }
 
-      if (state.editingReviewId) {
+      state.savingReview = true;
+      const submitButton = document.getElementById('modal-submit-btn');
+      const originalButtonHtml = submitButton ? submitButton.innerHTML : '';
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.classList.add('opacity-60', 'cursor-not-allowed');
+        submitButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> 저장 중...';
+      }
+
+      try {
+        if (state.editingReviewId) {
         const targetReview = state.reviews.find(r => r.id === state.editingReviewId);
         if (targetReview) {
           targetReview.rating = state.selectedRating;
@@ -2163,19 +2203,35 @@
 
         const ok = await syncReviewToCloud(newReview);
         if (!ok) return;
-        state.reviews.unshift(newReview);
+
+        // Firestore onSnapshot이 ref.set() 직후 먼저 들어올 수 있으므로
+        // 무조건 unshift하지 않고 ID 기준으로 한 번만 삽입합니다.
+        const existingIndex = state.reviews.findIndex(r => r.id === newReview.id);
+        if (existingIndex >= 0) {
+          state.reviews[existingIndex] = { ...state.reviews[existingIndex], ...newReview };
+        } else {
+          state.reviews.unshift(newReview);
+        }
         saveReviewsToStorage(false);
         showToast("새 감상평이 피드에 등록되었습니다!");
-      }
+        }
 
-      closeReviewModal();
-      
-      const detailModal = document.getElementById('post-detail-modal');
-      if (!detailModal.classList.contains('hidden') && state.activeSearchItem) {
-        openGroupDetailModal(state.activeSearchItem.workKey || state.activeSearchItem.title);
-      } else {
-        renderFeed();
-        displayRandomHeroReview();
+        closeReviewModal();
+        
+        const detailModal = document.getElementById('post-detail-modal');
+        if (!detailModal.classList.contains('hidden') && state.activeSearchItem) {
+          openGroupDetailModal(state.activeSearchItem.workKey || state.activeSearchItem.title);
+        } else {
+          renderFeed();
+          displayRandomHeroReview();
+        }
+      } finally {
+        state.savingReview = false;
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove('opacity-60', 'cursor-not-allowed');
+          submitButton.innerHTML = originalButtonHtml;
+        }
       }
     }
 
