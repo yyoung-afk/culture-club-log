@@ -96,7 +96,11 @@
       box-shadow: 0 12px 30px -10px rgba(99, 102, 241, 0.3);
     }
   </style>
-</head>
+<script>
+    // Cloudflare Worker 검색 프록시 주소. 배포 후 실제 workers.dev 주소로 변경하세요.
+    window.CULTURE_SEARCH_PROXY_URL = 'https://culture-club-search-proxy.culture-club-search.workers.dev';
+  </script>
+  </head>
 <body class="h-full flex flex-col font-sans antialiased text-slate-100 bg-slate-950">
 
   <header class="sticky top-0 z-40 glass-nav">
@@ -200,7 +204,7 @@
             감상한 책이나 영화를 검색해보세요
           </h2>
           <p class="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
-            책 제목, 저자, 또는 영화 제목을 입력하면 Kakao Book 및 TMDB API에서 실시간으로 가져옵니다.
+            책 제목·저자 또는 영화 제목을 입력하면 무료 공개 데이터 소스를 조합해 검색합니다. 기존 기록의 포스터는 우선 재사용합니다.
           </p>
 
           <form onsubmit="handleSearch(event)" class="mt-6 flex items-center gap-2 max-w-2xl">
@@ -528,10 +532,9 @@
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
   <script>
-    // 외부 검색 API 키는 브라우저에 노출하지 않습니다.
-    // 아래 프록시 URL을 서버/Cloud Function에 배포한 뒤 설정하세요.
-    const BOOK_SEARCH_PROXY_URL = "/api/bookSearch";
-    const MOVIE_SEARCH_PROXY_URL = "/api/movieSearch";
+    // Firebase Spark 무료 플랜용: 외부 검색은 API 키가 필요 없는 공개 API를 사용합니다.
+    const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
+    const WIKIPEDIA_SEARCH_URL = "https://ko.wikipedia.org/w/api.php";
     const DEFAULT_FIREBASE_CONFIG = {
       apiKey: "AIzaSyDy3MPLN2kmYyEde4eIdEREMjfbhGwZcXI",
       authDomain: "culture-club-log.firebaseapp.com",
@@ -1212,7 +1215,7 @@
         if (cloudStatusIndicator) cloudStatusIndicator.className = "text-xs text-emerald-400 flex items-center gap-1.5 font-bold";
 
         const reviewsCollection = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews');
-        
+
         reviewsCollection.onSnapshot((snapshot) => {
           const cloudReviews = [];
           snapshot.forEach(docSnap => {
@@ -1227,14 +1230,15 @@
             cloudReviews.forEach(r => merged.set(r.id, r));
             state.reviews = Array.from(merged.values());
 
-            let addedNewAuthor = false;
             cloudReviews.forEach(r => {
               if (r.author && r.author !== '민우' && !state.friends.includes(r.author)) {
                 state.friends.push(r.author);
-                addedNewAuthor = true;
               }
             });
 
+            state.friends = Array.from(new Set(state.friends))
+              .filter(f => f && f !== '민우')
+              .sort((a,b) => a.localeCompare(b, 'ko'));
             saveReviewsToStorage(false);
             renderUserDropdown();
             updateFeedBadge();
@@ -1244,33 +1248,9 @@
               displayRandomHeroReview();
             }
             if (state.currentTab === 'stats') updateStats();
-
-            if (addedNewAuthor) {
-              syncFriendsToCloud();
-            }
           }
         }, (err) => {
           console.warn("Firestore subscription warning:", err);
-        });
-
-        // 원본 JSON의 26개 기록 중 Firestore에 없는 문서만 안전하게 복원합니다.
-        await migrateHistoricalReviewsToCloud();
-
-        // Sync friends list from Firebase Cloud
-        const friendsDoc = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('meta').doc('friends');
-        friendsDoc.onSnapshot((docSnap) => {
-          if (docSnap.exists) {
-            const cloudFriends = docSnap.data().list;
-            if (Array.isArray(cloudFriends) && cloudFriends.length > 0) {
-              const cleaned = cloudFriends.filter(f => f !== '민우');
-              cleaned.forEach(f => {
-                if (!state.friends.includes(f)) state.friends.push(f);
-              });
-              saveReviewsToStorage(false);
-              renderUserDropdown();
-              if (state.currentTab === 'stats') updateStats();
-            }
-          }
         });
 
       } catch (err) {
@@ -1279,15 +1259,29 @@
       }
     }
 
-    async function syncFriendsToCloud() {
-      if (!isFirebaseConnected || !db) return;
+    async function loadCloudComments(review) {
+      if (!isFirebaseConnected || !db || !review?.id) return;
       try {
-        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('meta').doc('friends').set({
-          list: state.friends
-        });
+        const snap = await db.collection('artifacts').doc(appId)
+          .collection('public').doc('data').collection('reviews').doc(review.id)
+          .collection('comments').orderBy('createdAt', 'asc').get();
+
+        const legacy = Array.isArray(review.comments)
+          ? review.comments.filter(c => c && !c._subcollection)
+          : [];
+        const cloud = snap.docs.map(docSnap => ({
+          ...docSnap.data(),
+          id: docSnap.id,
+          _subcollection: true
+        }));
+        review.comments = [...legacy, ...cloud];
       } catch (err) {
-        console.error("Firestore friends sync error:", err);
+        console.warn('Comment load warning:', err);
       }
+    }
+
+    function getReviewComments(review) {
+      return Array.isArray(review?.comments) ? review.comments : [];
     }
 
     function loadSavedReviews() {
@@ -1331,28 +1325,8 @@
       return clean;
     }
 
-    async function migrateHistoricalReviewsToCloud() {
-      if (!isFirebaseConnected || !db) return;
-      const col = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews');
-      try {
-        const checks = await Promise.all(HISTORICAL_BACKUP_REVIEWS.map(r => col.doc(r.id).get()));
-        const batch = db.batch();
-        let count = 0;
-        checks.forEach((snap, i) => {
-          if (!snap.exists) {
-            batch.set(col.doc(HISTORICAL_BACKUP_REVIEWS[i].id), sanitizeReview({ ...HISTORICAL_BACKUP_REVIEWS[i], legacy: true }));
-            count++;
-          }
-        });
-        if (count > 0) await batch.commit();
-        console.info(`Historical migration checked 26 reviews; restored ${count} missing documents.`);
-      } catch (err) {
-        console.error("Historical migration error:", err);
-      }
-    }
-
     async function syncReviewToCloud(reviewObj, options = {}) {
-      if (!isFirebaseConnected || !db) return;
+      if (!isFirebaseConnected || !db) return false;
       try {
         const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(reviewObj.id);
         if (options.partial) {
@@ -1360,18 +1334,23 @@
         } else {
           await ref.set(reviewObj);
         }
+        return true;
       } catch (err) {
         console.error("Firestore sync error:", err);
-        showToast('클라우드 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        showToast('클라우드 저장에 실패했습니다. 변경 사항을 되돌립니다.');
+        return false;
       }
     }
 
     async function deleteReviewFromCloud(reviewId) {
-      if (!isFirebaseConnected || !db) return;
+      if (!isFirebaseConnected || !db) return false;
       try {
         await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(reviewId).delete();
+        return true;
       } catch (err) {
         console.error("Firestore delete error:", err);
+        showToast('클라우드 삭제에 실패했습니다.');
+        return false;
       }
     }
 
@@ -1569,50 +1548,197 @@
       else loadPopularContents();
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // 검색 API: Cloudflare Worker 프록시 → Kakao / TMDB
+    // API 키는 이 HTML에 넣지 않습니다. Worker Secret에 보관합니다.
+    // worker URL은 worker-config.js에서 설정합니다.
+    // ─────────────────────────────────────────────────────────────
+    const SEARCH_CACHE_PREFIX = 'culture-search-v4:';
+    const SEARCH_CACHE_TTL = 1000 * 60 * 60 * 12;
+    const NO_COVER = 'https://placehold.co/300x420/1e293b/94a3b8?text=No+Cover';
+    const NO_POSTER = 'https://placehold.co/300x420/1e293b/94a3b8?text=No+Poster';
+    const SEARCH_PROXY_BASE = (window.CULTURE_SEARCH_PROXY_URL || '').replace(/\/$/, '');
+
+    function normalizeSearchText(value) {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[\u200b-\u200d\ufeff]/g, '')
+        .replace(/[“”‘’'"`]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function getSearchCache(query) {
+      try {
+        const raw = localStorage.getItem(SEARCH_CACHE_PREFIX + normalizeSearchText(query));
+        if (!raw) return null;
+        const item = JSON.parse(raw);
+        if (!item || Date.now() - item.savedAt > SEARCH_CACHE_TTL) return null;
+        return item.data || null;
+      } catch (_) { return null; }
+    }
+
+    function setSearchCache(query, data) {
+      try {
+        localStorage.setItem(SEARCH_CACHE_PREFIX + normalizeSearchText(query), JSON.stringify({ savedAt: Date.now(), data }));
+      } catch (_) {}
+    }
+
+    function getKnownContentCatalog() {
+      const source = [...(Array.isArray(state.reviews) ? state.reviews : []), ...(Array.isArray(HISTORICAL_BACKUP_REVIEWS) ? HISTORICAL_BACKUP_REVIEWS : [])];
+      const map = new Map();
+      source.forEach(item => {
+        if (!item || !item.title || !item.type) return;
+        const key = `${item.type}:${normalizeSearchText(item.title)}`;
+        const old = map.get(key);
+        if (!old || (!old.coverUrl && item.coverUrl) || (!old.subTitle && item.subTitle)) {
+          map.set(key, {
+            type: item.type,
+            title: item.title,
+            subTitle: item.subTitle || '',
+            coverUrl: item.coverUrl || '',
+            desc: item.detail || item.oneLiner || '',
+            workKey: item.workKey || `${item.type}_${item.title}`
+          });
+        }
+      });
+      return [...map.values()];
+    }
+
+    function findKnownContents(query) {
+      const q = normalizeSearchText(query);
+      if (!q) return [];
+      return getKnownContentCatalog()
+        .map(item => ({ item, score: normalizeSearchText(item.title) === q ? 100 : (normalizeSearchText(item.title).includes(q) ? 70 : 0) }))
+        .filter(x => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map(x => x.item)
+        .slice(0, 8);
+    }
+
+    async function proxySearch(type, query, extra = '', timeoutMs = 12000) {
+      if (!SEARCH_PROXY_BASE) throw new Error('SEARCH_PROXY_URL이 설정되지 않았습니다.');
+      const url = `${SEARCH_PROXY_BASE}/${type}?q=${encodeURIComponent(query)}${extra}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          signal: controller.signal,
+          cache: 'no-store'
+        });
+        if (!res.ok) throw new Error(`Search proxy HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        if (err && err.name === 'AbortError') {
+          throw new Error(`${type} 검색 시간 초과 (12초)`);
+        }
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function searchKakaoBooks(query, limit = 8) {
+      const data = await proxySearch('book', query, `&size=${Math.min(limit, 10)}`);
+      return Array.isArray(data.documents) ? data.documents.map(book => ({
+        source: 'kakao',
+        title: book.title || '제목 미상',
+        authors: Array.isArray(book.authors) ? book.authors.slice(0, 3) : [],
+        publisher: book.publisher || '',
+        year: book.datetime ? String(book.datetime).slice(0, 4) : '',
+        contents: book.contents || '',
+        thumbnail: book.thumbnail || '',
+        isbn: book.isbn || '',
+        url: book.url || ''
+      })) : [];
+    }
+
+    async function searchTMDBMovies(query, limit = 8) {
+      const data = await proxySearch('movie', query, `&page=1&language=ko-KR`);
+      return Array.isArray(data.results) ? data.results.slice(0, limit).map(movie => ({
+        source: 'tmdb',
+        title: movie.title || movie.original_title || '제목 미상',
+        release_date: movie.release_date || '',
+        vote_average: Number(movie.vote_average || 0),
+        poster_path: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : '',
+        overview: movie.overview || '',
+        original_title: movie.original_title || ''
+      })) : [];
+    }
+
+    function mergeBookResults(apiBooks, knownBooks, limit = 8) {
+      const result = [];
+      const seen = new Set();
+      const add = book => {
+        const key = normalizeSearchText(book.title);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        result.push(book);
+      };
+      knownBooks.forEach(item => add({
+        source: 'known', title: item.title, authors: [], publisher: item.subTitle || '', year: '', contents: item.desc || '', thumbnail: item.coverUrl || ''
+      }));
+      apiBooks.forEach(add);
+      return result.slice(0, limit);
+    }
+
+    function mergeMovieResults(apiMovies, knownMovies, query, limit = 8) {
+      const q = normalizeSearchText(query);
+      const all = [];
+      const seen = new Set();
+      const add = movie => {
+        const key = normalizeSearchText(movie.title);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        all.push(movie);
+      };
+      knownMovies.forEach(item => add({
+        source: 'known', title: item.title, release_date: '', vote_average: 0, poster_path: item.coverUrl || '', overview: item.desc || ''
+      }));
+      apiMovies.sort((a, b) => {
+        const ae = normalizeSearchText(a.title) === q ? 1 : 0;
+        const be = normalizeSearchText(b.title) === q ? 1 : 0;
+        return be - ae;
+      }).forEach(add);
+      return all.slice(0, limit);
+    }
+
     async function loadPopularContents() {
       const grid = document.getElementById('search-results-grid');
       const countTag = document.getElementById('search-count-tag');
       const titleEl = document.getElementById('search-results-title');
       const iconEl = document.getElementById('search-results-icon');
 
-      if (titleEl) titleEl.textContent = "실시간 인기 콘텐츠";
-      if (iconEl) iconEl.className = "fa-solid fa-fire text-rose-500";
-      if (countTag) countTag.textContent = "도서 & 영화 베스트 추천";
+      if (titleEl) titleEl.textContent = '실시간 인기 콘텐츠';
+      if (iconEl) iconEl.className = 'fa-solid fa-fire text-rose-500';
+      if (countTag) countTag.textContent = 'Kakao · TMDB';
 
       grid.innerHTML = Array(6).fill(0).map(() => `
         <div class="glass-card rounded-2xl p-3 border border-slate-800 animate-pulse space-y-3">
           <div class="w-full aspect-[2/3] bg-slate-800 rounded-xl"></div>
           <div class="h-4 bg-slate-800 rounded w-3/4"></div>
           <div class="h-3 bg-slate-800 rounded w-1/2"></div>
-        </div>
-      `).join('');
+        </div>`).join('');
+
+      const known = getKnownContentCatalog();
+      const knownBooks = known.filter(x => x.type === 'book').slice(0, 3);
+      const knownMovies = known.filter(x => x.type === 'movie').slice(0, 3);
 
       try {
-        const popularBookKeywords = ['소년이 온다', '불편한 편의점', '모순'];
-        const bookPromises = popularBookKeywords.map(async (kw) => {
-          if (!BOOK_SEARCH_PROXY_URL) return null;
-          const res = await fetch(`${BOOK_SEARCH_PROXY_URL}?q=${encodeURIComponent(kw)}&size=1`);
-          if (!res.ok) return null;
-          const data = await res.json();
-          return data.documents ? data.documents[0] : null;
-        });
-
-        const tmdbMovieUrl = MOVIE_SEARCH_PROXY_URL ? `${MOVIE_SEARCH_PROXY_URL}?path=popular&language=ko-KR&page=1` : null;
-        const moviePromise = tmdbMovieUrl ? fetch(tmdbMovieUrl).then(res => res.ok ? res.json() : { results: [] }) : Promise.resolve({ results: [] });
-
-        const [booksResult, movieData] = await Promise.all([
-          Promise.all(bookPromises),
-          moviePromise
+        const [books, movies] = await Promise.all([
+          Promise.all(['소년이 온다', '불편한 편의점', '모순'].map(q => searchKakaoBooks(q, 1).catch(() => []))).then(x => x.flat()),
+          searchTMDBMovies('인기', 3).catch(() => [])
         ]);
-
-        const validBooks = booksResult.filter(Boolean);
-        const popularMovies = movieData.results ? movieData.results.slice(0, 3) : [];
-
-        renderIntegratedResults(validBooks, popularMovies, "실시간 인기 모음");
-
+        renderIntegratedResults(mergeBookResults(books, knownBooks, 6), mergeMovieResults(movies, knownMovies, '인기', 6), '추천 콘텐츠');
       } catch (err) {
-        console.warn("Error fetching popular contents:", err);
-        renderFallbackPopularContents();
+        console.warn('Search proxy popular error:', err);
+        renderIntegratedResults(
+          knownBooks.map(item => ({ source: 'known', title: item.title, authors: [], publisher: item.subTitle || '', thumbnail: item.coverUrl || '', contents: item.desc || '' })),
+          knownMovies.map(item => ({ source: 'known', title: item.title, poster_path: item.coverUrl || '', overview: item.desc || '' })),
+          '추천 콘텐츠'
+        );
       }
     }
 
@@ -1621,209 +1747,130 @@
       const countTag = document.getElementById('search-count-tag');
       const titleEl = document.getElementById('search-results-title');
       const iconEl = document.getElementById('search-results-icon');
-      
+
       document.getElementById('btn-clear-search').classList.remove('hidden');
-
       if (titleEl) titleEl.textContent = `'${query}' 검색 결과`;
-      if (iconEl) iconEl.className = "fa-solid fa-magnifying-glass text-indigo-400";
-      if (countTag) countTag.textContent = "검색 중...";
-
+      if (iconEl) iconEl.className = 'fa-solid fa-magnifying-glass text-indigo-400';
+      if (countTag) countTag.textContent = 'Kakao · TMDB 검색 중...';
       grid.innerHTML = Array(6).fill(0).map(() => `
         <div class="glass-card rounded-2xl p-3 border border-slate-800 animate-pulse space-y-3">
           <div class="w-full aspect-[2/3] bg-slate-800 rounded-xl"></div>
           <div class="h-4 bg-slate-800 rounded w-3/4"></div>
           <div class="h-3 bg-slate-800 rounded w-1/2"></div>
-        </div>
-      `).join('');
+        </div>`).join('');
 
-      try {
-        const bookUrl = BOOK_SEARCH_PROXY_URL ? `${BOOK_SEARCH_PROXY_URL}?q=${encodeURIComponent(query)}&size=6` : null;
-        const movieUrl = MOVIE_SEARCH_PROXY_URL ? `${MOVIE_SEARCH_PROXY_URL}?path=search&language=ko-KR&query=${encodeURIComponent(query)}&page=1` : null;
-
-        const [bookRes, movieRes] = await Promise.all([
-          bookUrl ? fetch(bookUrl).catch(() => null) : Promise.resolve(null),
-          movieUrl ? fetch(movieUrl).catch(() => null) : Promise.resolve(null)
-        ]);
-
-        let books = [];
-        let movies = [];
-
-        if (bookRes && bookRes.ok) {
-          const bData = await bookRes.json();
-          books = bData.documents || [];
-        }
-
-        if (movieRes && movieRes.ok) {
-          const mData = await movieRes.json();
-          movies = mData.results || [];
-        }
-
-        renderIntegratedResults(books, movies, query);
-
-      } catch (err) {
-        console.warn("Search fallback:", err);
-        renderFallbackPopularContents();
-      }
-    }
-
-    function renderIntegratedResults(books, movies, query) {
-      const grid = document.getElementById('search-results-grid');
-      const countTag = document.getElementById('search-count-tag');
-
-      state.searchResults = [];
-
-      const totalCount = books.length + movies.length;
-      if (countTag) countTag.textContent = `도서 ${books.length}개 · 영화 ${movies.length}개`;
-
-      if (totalCount === 0) {
-        grid.innerHTML = `
-          <div class="col-span-full py-12 text-center text-slate-400">
-            <i class="fa-solid fa-circle-exclamation text-3xl text-slate-600 mb-2"></i>
-            <p class="text-sm font-bold text-slate-300">'${escapeHtml(query)}'에 대한 검색 결과가 없습니다.</p>
-            <p class="text-xs text-slate-500 mt-1">다른 키워드로 검색해보세요.</p>
-          </div>
-        `;
+      const cached = getSearchCache(query);
+      if (cached) {
+        renderIntegratedResults(cached.books || [], cached.movies || [], query);
         return;
       }
 
-      let html = '';
+      const known = findKnownContents(query);
+      const knownBooks = known.filter(x => x.type === 'book');
+      const knownMovies = known.filter(x => x.type === 'movie');
 
-      books.forEach(book => {
-        const cover = book.thumbnail || 'https://placehold.co/300x420/1e293b/94a3b8?text=No+Cover';
-        const authors = book.authors ? book.authors.join(', ') : '작자 미상';
-        const publisher = book.publisher || '';
-        
-        const itemObj = {
-          workKey: `book_${book.title.trim()}`,
-          type: 'book',
-          title: book.title,
-          subTitle: `${authors} · ${publisher}`,
-          coverUrl: cover,
-          desc: book.contents || '줄거리 정보가 제공되지 않습니다.'
-        };
+      try {
+        const [apiBooks, apiMovies] = await Promise.all([
+          searchKakaoBooks(query, 8).catch(err => { console.warn('Kakao search failed:', err); return []; }),
+          searchTMDBMovies(query, 8).catch(err => { console.warn('TMDB search failed:', err); return []; })
+        ]);
+        const books = mergeBookResults(apiBooks, knownBooks, 8);
+        const movies = mergeMovieResults(apiMovies, knownMovies, query, 8);
+        setSearchCache(query, { books, movies });
+        renderIntegratedResults(books, movies, query);
+      } catch (err) {
+        console.warn('Search proxy error:', err);
+        const books = knownBooks.map(item => ({ source: 'known', title: item.title, authors: [], publisher: item.subTitle || '', thumbnail: item.coverUrl || '', contents: item.desc || '' }));
+        const movies = knownMovies.map(item => ({ source: 'known', title: item.title, poster_path: item.coverUrl || '', overview: item.desc || '' }));
+        renderIntegratedResults(books, movies, query);
+        if (!books.length && !movies.length) {
+          showToast('검색 서버에 연결하지 못했습니다. Worker 주소와 CORS 설정을 확인하세요.');
+        } else {
+          if (!books.length) showToast('Kakao 도서 검색이 응답하지 않아 영화 결과만 표시합니다.');
+          if (!movies.length) showToast('TMDB 영화 검색이 응답하지 않아 도서 결과만 표시합니다.');
+        }
+      }
+    }
 
-        const itemIndex = state.searchResults.length;
-        state.searchResults.push(itemObj);
+    function renderIntegratedResults(books = [], movies = [], query = '') {
+      const grid = document.getElementById('search-results-grid');
+      const countTag = document.getElementById('search-count-tag');
+      if (!grid) return;
 
-        html += `
-          <div class="glass-card rounded-2xl p-3 border border-slate-800 hover:border-amber-500/50 transition duration-200 flex flex-col justify-between group">
-            <div>
-              <div class="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 mb-2.5">
-                <img src="${cover}" alt="${escapeHtml(book.title)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" onerror="this.src='https://placehold.co/300x420/1e293b/94a3b8?text=No+Cover'">
-                <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500 text-slate-950 shadow">
-                  📚 도서
-                </span>
-              </div>
-              <h4 class="text-xs font-bold text-white line-clamp-1 group-hover:text-amber-400 transition" title="${escapeHtml(book.title)}">
-                ${escapeHtml(book.title)}
-              </h4>
-              <p class="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
-                ${escapeHtml(authors)}
-              </p>
+      const bookItems = (Array.isArray(books) ? books : []).map(book => ({
+        type: 'book',
+        title: book.title || '제목 미상',
+        subTitle: [
+          Array.isArray(book.authors) ? book.authors.join(', ') : '',
+          book.publisher || '',
+          book.year || ''
+        ].filter(Boolean).join(' · '),
+        desc: book.contents || '',
+        coverUrl: book.thumbnail || NO_COVER,
+        source: book.source || 'kakao',
+        isbn: book.isbn || '',
+        url: book.url || ''
+      }));
+
+      const movieItems = (Array.isArray(movies) ? movies : []).map(movie => ({
+        type: 'movie',
+        title: movie.title || movie.original_title || '제목 미상',
+        subTitle: movie.release_date ? String(movie.release_date).slice(0, 4) : '',
+        desc: movie.overview || '',
+        coverUrl: movie.poster_path || NO_POSTER,
+        source: movie.source || 'tmdb',
+        rating: Number(movie.vote_average || 0),
+        release_date: movie.release_date || ''
+      }));
+
+      state.searchResults = [...bookItems, ...movieItems];
+
+      if (countTag) {
+        countTag.textContent = `도서 ${bookItems.length} · 영화 ${movieItems.length}`;
+      }
+
+      if (!state.searchResults.length) {
+        grid.innerHTML = `<div class="col-span-full py-16 text-center text-slate-500">
+          <i class="fa-solid fa-magnifying-glass text-2xl mb-3"></i>
+          <p class="text-sm font-bold">'${escapeHtml(query)}' 검색 결과가 없습니다.</p>
+        </div>`;
+        return;
+      }
+
+      grid.innerHTML = state.searchResults.map((item, idx) => {
+        const isBook = item.type === 'book';
+        const cover = item.coverUrl || (isBook ? NO_COVER : NO_POSTER);
+        const meta = isBook
+          ? (item.subTitle || '도서')
+          : (item.subTitle ? `${item.subTitle}${item.rating ? ` · ★ ${item.rating.toFixed(1)}` : ''}` : '영화');
+        return `<div class="glass-card rounded-2xl p-3 border border-slate-800 flex flex-col justify-between group">
+          <div>
+            <div class="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 mb-2.5">
+              <img src="${escapeHtml(cover)}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover" loading="lazy" onerror="this.onerror=null;this.src='${isBook ? NO_COVER : NO_POSTER}'">
+              <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold ${isBook ? 'bg-amber-500 text-slate-950' : 'bg-rose-600 text-white'}">${isBook ? '📚 도서' : '🎬 영화'}</span>
             </div>
-
-            <button onclick="openReviewModalFromIndex(${itemIndex})" class="mt-3 w-full py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 text-xs font-bold transition border border-amber-500/20 flex items-center justify-center gap-1">
-              <i class="fa-solid fa-star text-[10px]"></i> 감상평 남기기
-            </button>
+            <h4 class="text-xs font-bold text-white line-clamp-2">${escapeHtml(item.title)}</h4>
+            <p class="text-[11px] text-slate-400 line-clamp-2 mt-0.5">${escapeHtml(meta)}</p>
           </div>
-        `;
-      });
-
-      movies.forEach(movie => {
-        const cover = movie.poster_path 
-          ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
-          : 'https://placehold.co/300x420/1e293b/94a3b8?text=No+Poster';
-        
-        const year = movie.release_date ? movie.release_date.split('-')[0] : '연도 미상';
-        const rating = movie.vote_average ? (movie.vote_average / 2).toFixed(1) : '4.5';
-        
-        const itemObj = {
-          workKey: `movie_${movie.title.trim()}`,
-          type: 'movie',
-          title: movie.title,
-          subTitle: `${year}년 개봉 · TMDB ⭐ ${rating}`,
-          coverUrl: cover,
-          desc: movie.overview || '상세 줄거리 정보가 제공되지 않습니다.'
-        };
-
-        const itemIndex = state.searchResults.length;
-        state.searchResults.push(itemObj);
-
-        html += `
-          <div class="glass-card rounded-2xl p-3 border border-slate-800 hover:border-rose-500/50 transition duration-200 flex flex-col justify-between group">
-            <div>
-              <div class="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 mb-2.5">
-                <img src="${cover}" alt="${escapeHtml(movie.title)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" onerror="this.src='https://placehold.co/300x420/1e293b/94a3b8?text=No+Poster'">
-                <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-600 text-white shadow">
-                  🎬 영화
-                </span>
-                <span class="absolute bottom-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-950/80 text-amber-400 backdrop-blur">
-                  ★ ${rating}
-                </span>
-              </div>
-              <h4 class="text-xs font-bold text-white line-clamp-1 group-hover:text-rose-400 transition" title="${escapeHtml(movie.title)}">
-                ${escapeHtml(movie.title)}
-              </h4>
-              <p class="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
-                ${year}년 개봉
-              </p>
-            </div>
-
-            <button onclick="openReviewModalFromIndex(${itemIndex})" class="mt-3 w-full py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white text-xs font-bold transition border border-rose-500/20 flex items-center justify-center gap-1">
-              <i class="fa-solid fa-star text-[10px]"></i> 감상평 남기기
-            </button>
-          </div>
-        `;
-      });
-
-      grid.innerHTML = html;
+          <button onclick="openReviewModalFromIndex(${idx})" class="mt-3 w-full py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white text-xs font-bold transition border border-indigo-500/20 flex items-center justify-center gap-1">
+            <i class="fa-solid fa-star text-[10px]"></i> 감상평 남기기
+          </button>
+        </div>`;
+      }).join('');
     }
 
     function renderFallbackPopularContents() {
-      state.searchResults = [
-        {
-          workKey: "book_소년이 온다",
-          type: 'book',
-          title: "소년이 온다",
-          subTitle: "한강 저 · 창비",
-          coverUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&auto=format&fit=crop&q=80",
-          desc: "역사의 아픔을 가슴 깊이 새기게 하는 묵직하고 아름다운 문장들."
-        },
-        {
-          workKey: "movie_인사이드 아웃 2",
-          type: 'movie',
-          title: "인사이드 아웃 2",
-          subTitle: "캘시 만 감독 · 2024년 개봉",
-          coverUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&auto=format&fit=crop&q=80",
-          desc: "사춘기의 불안함마저 나 자신의 소중한 일부임을 따뜻하게 안아준다."
-        }
-      ];
-
+      const known = getKnownContentCatalog();
+      state.searchResults = known.slice(0, 6).map(item => ({ ...item }));
       const grid = document.getElementById('search-results-grid');
       grid.innerHTML = state.searchResults.map((item, idx) => {
         const isBook = item.type === 'book';
-        return `
-          <div class="glass-card rounded-2xl p-3 border border-slate-800 hover:border-indigo-500/50 transition duration-200 flex flex-col justify-between group">
-            <div>
-              <div class="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 mb-2.5">
-                <img src="${item.coverUrl}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
-                <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold ${isBook ? 'bg-amber-500 text-slate-950' : 'bg-rose-600 text-white'} shadow">
-                  ${isBook ? '📚 도서' : '🎬 영화'}
-                </span>
-              </div>
-              <h4 class="text-xs font-bold text-white line-clamp-1 group-hover:text-indigo-400 transition">
-                ${escapeHtml(item.title)}
-              </h4>
-              <p class="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
-                ${escapeHtml(item.subTitle)}
-              </p>
-            </div>
-
-            <button onclick="openReviewModalFromIndex(${idx})" class="mt-3 w-full py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white text-xs font-bold transition border border-indigo-500/20 flex items-center justify-center gap-1">
-              <i class="fa-solid fa-star text-[10px]"></i> 감상평 남기기
-            </button>
-          </div>
-        `;
+        const cover = item.coverUrl || (isBook ? NO_COVER : NO_POSTER);
+        return `<div class="glass-card rounded-2xl p-3 border border-slate-800 flex flex-col justify-between group"><div>
+          <div class="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 mb-2.5"><img src="${cover}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover" onerror="this.onerror=null;this.src='${isBook ? NO_COVER : NO_POSTER}'">
+          <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold ${isBook ? 'bg-amber-500 text-slate-950' : 'bg-rose-600 text-white'}">${isBook ? '📚 도서' : '🎬 영화'}</span></div>
+          <h4 class="text-xs font-bold text-white line-clamp-1">${escapeHtml(item.title)}</h4><p class="text-[11px] text-slate-400 line-clamp-1 mt-0.5">${escapeHtml(item.subTitle || '')}</p></div>
+          <button onclick="openReviewModalFromIndex(${idx})" class="mt-3 w-full py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white text-xs font-bold transition border border-indigo-500/20 flex items-center justify-center gap-1"><i class="fa-solid fa-star text-[10px]"></i> 감상평 남기기</button></div>`;
       }).join('');
     }
 
@@ -1870,22 +1917,23 @@
       showInputModal(
         "새 친구 등록하기",
         "새로운 작성자(친구)의 이름을 입력하세요...",
-        (name) => {
+        async (name) => {
           const cleanName = name.trim();
-          if (cleanName === '민우') {
-            showToast("'민우'는 등록할 수 없는 이름입니다.");
+          if (!cleanName || cleanName === '민우' || cleanName.length > 50) {
+            showToast('사용할 수 없는 이름입니다.');
             return;
           }
-          if (!state.friends.includes(cleanName)) {
-            state.friends.push(cleanName);
-            saveReviewsToStorage();
-            syncFriendsToCloud();
-            renderUserDropdown();
-            updateStats();
-            showToast(`새 친구 '${cleanName}'(이)가 추가되었습니다.`);
-          } else {
+          if (state.friends.includes(cleanName)) {
             showToast(`이미 '${cleanName}' 멤버가 존재합니다.`);
+            return;
           }
+          state.friends.push(cleanName);
+          state.friends.sort((a,b) => a.localeCompare(b, 'ko'));
+          saveReviewsToStorage(false);
+          renderUserDropdown();
+          updateStats();
+          showToast(`새 친구 '${cleanName}'(이)가 추가되었습니다. (이 브라우저에 저장됨)`);
+
         }
       );
     }
@@ -1906,7 +1954,7 @@
           state.friends = state.friends.filter(f => f !== friendName);
           if (state.activeUser === friendName) state.activeUser = '지영';
           saveReviewsToStorage();
-          syncFriendsToCloud();
+          
           renderUserDropdown();
           updateStats();
           showToast(`멤버 '${friendName}'님이 삭제되었습니다.`);
@@ -1938,7 +1986,7 @@
       // 작성자 선택 select populate
       const authorSelect = document.getElementById('review-author-select');
       if (authorSelect) {
-        authorSelect.disabled = false;
+        authorSelect.disabled = !!state.editingReviewId;
         authorSelect.innerHTML = `<option value="">작성자를 반드시 선택하세요</option>` + state.friends.map(f => `
           <option value="${escapeHtml(f)}">${escapeHtml(f)}</option>
         `).join('');
@@ -1958,9 +2006,9 @@
       const review = state.reviews.find(r => r.id === reviewId);
       if (!review) return;
 
-      const canEdit = !!state.activeUser && state.activeUser === review.author && (!review.authorUid || review.authorUid === state.activeUserUid);
+      const canEdit = !!state.activeUserUid && !!review.authorUid && state.activeUser === review.author && review.authorUid === state.activeUserUid;
       if (!canEdit) {
-        showToast(`수정 권한이 없습니다. (현재 작성자: '${state.activeUser}' / 작성자: '${review.author}')`);
+        showToast(review.authorUid ? `수정 권한이 없습니다. (현재 작성자: '${state.activeUser}' / 작성자: '${review.author}')` : '기존 백업 기록은 데이터 보존을 위해 수정할 수 없습니다. 새로 작성된 기록부터 수정할 수 있습니다.');
         return;
       }
 
@@ -2079,13 +2127,17 @@
           }
           targetReview.updatedAt = new Date().toISOString();
 
-          saveReviewsToStorage();
-          await syncReviewToCloud(targetReview, { partial: {
+          const ok = await syncReviewToCloud(targetReview, { partial: {
             rating: targetReview.rating,
             oneLiner: targetReview.oneLiner,
             detail: targetReview.detail,
             updatedAt: targetReview.updatedAt
           }});
+          if (!ok) {
+            state.editingReviewId = null;
+            return;
+          }
+          saveReviewsToStorage(false);
           showToast(`감상평이 수정되었습니다! (작성자: ${targetReview.author})`);
         }
         state.editingReviewId = null;
@@ -2109,9 +2161,10 @@
           comments: []
         };
 
+        const ok = await syncReviewToCloud(newReview);
+        if (!ok) return;
         state.reviews.unshift(newReview);
-        saveReviewsToStorage();
-        await syncReviewToCloud(newReview);
+        saveReviewsToStorage(false);
         showToast("새 감상평이 피드에 등록되었습니다!");
       }
 
@@ -2130,9 +2183,9 @@
       const review = state.reviews.find(r => r.id === reviewId);
       if (!review) return;
 
-      const canDelete = !!state.activeUser && state.activeUser === review.author && (!review.authorUid || review.authorUid === state.activeUserUid);
+      const canDelete = !!state.activeUserUid && !!review.authorUid && state.activeUser === review.author && review.authorUid === state.activeUserUid;
       if (!canDelete) {
-        showToast(`삭제 권한이 없습니다. (${review.author} 님 작성)`);
+        showToast(review.authorUid ? `삭제 권한이 없습니다. (${review.author} 님 작성)` : '기존 백업 기록은 데이터 보존을 위해 삭제할 수 없습니다.');
         return;
       }
 
@@ -2140,9 +2193,10 @@
         "감상평 삭제",
         `"${review.title}" 감상평을 정말 삭제하시겠습니까?`,
         async () => {
+          const ok = await deleteReviewFromCloud(reviewId);
+          if (!ok) return;
           state.reviews = state.reviews.filter(r => r.id !== reviewId);
-          saveReviewsToStorage();
-          await deleteReviewFromCloud(reviewId);
+          saveReviewsToStorage(false);
 
           const modal = document.getElementById('post-detail-modal');
           if (!modal.classList.contains('hidden')) {
@@ -2267,7 +2321,7 @@
         const isBook = grp.type === 'book';
         const reviewsHtml = grp.reviews.map(item => {
           const itemDate = new Date(item.createdAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-          const canDelete = !!state.activeUser && state.activeUser === item.author && (!item.authorUid || item.authorUid === state.activeUserUid);
+          const canDelete = !!state.activeUser && !!item.authorUid && state.activeUser === item.author && item.authorUid === state.activeUserUid;
 
           return `
             <div class="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
@@ -2330,9 +2384,13 @@
       }).join('');
     }
 
-    function openGroupDetailModal(workKey) {
+    async function openGroupDetailModal(workKey) {
       const matchingReviews = state.reviews.filter(r => (r.workKey || `${r.type}_${r.title.trim()}`) === workKey || r.title === workKey);
       if (matchingReviews.length === 0) return;
+
+      if (isFirebaseConnected && db) {
+        await Promise.all(matchingReviews.map(loadCloudComments));
+      }
 
       const first = matchingReviews[0];
       const isBook = first.type === 'book';
@@ -2351,11 +2409,11 @@
       const reviewsListHtml = matchingReviews.map(item => {
         const itemDate = new Date(item.createdAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         const commentsList = item.comments || [];
-        const canDelete = !!state.activeUser && state.activeUser === item.author && (!item.authorUid || item.authorUid === state.activeUserUid);
+        const canDelete = !!state.activeUser && !!item.authorUid && state.activeUser === item.author && item.authorUid === state.activeUserUid;
 
         const commentsHtml = commentsList.map(c => {
           const cDate = new Date(c.createdAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-          const canDeleteComment = !!state.activeUser && state.activeUser === c.author && (!c.authorUid || c.authorUid === state.activeUserUid);
+          const canDeleteComment = !!state.activeUser && !!c.authorUid && !!c._subcollection && state.activeUser === c.author && c.authorUid === state.activeUserUid;
           return `
             <div class="flex items-start gap-2.5 text-xs bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
               <div class="w-6 h-6 rounded-full bg-indigo-600/80 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
@@ -2468,124 +2526,87 @@
       e.preventDefault();
       const input = e.target.querySelector('input');
       const text = input.value.trim();
-
       if (!text) return;
-      if (!state.activeUser) {
+      if (!state.activeUser || !state.activeUserUid) {
         showToast('댓글을 작성하기 전에 상단에서 작성자를 선택해주세요.');
         return;
       }
-
       const review = state.reviews.find(r => r.id === reviewId);
-      if (review) {
-        if (!review.comments) review.comments = [];
-        
-        review.comments.push({
-          id: 'c_' + Date.now(),
+      if (!review || !isFirebaseConnected || !db) return;
+
+      try {
+        const comment = {
+          id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           author: state.activeUser,
           authorUid: state.activeUserUid,
-          text: text,
+          text,
           createdAt: new Date().toISOString()
-        });
+        };
+        await db.collection('artifacts').doc(appId).collection('public').doc('data')
+          .collection('reviews').doc(reviewId).collection('comments').doc(comment.id).set(comment);
 
-        saveReviewsToStorage();
-        if (isFirebaseConnected && db) {
-          const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(review.id);
-          try {
-            await db.runTransaction(async tx => {
-              const snap = await tx.get(ref);
-              if (!snap.exists) throw new Error('Review document not found');
-              const data = snap.data() || {};
-              const comments = Array.isArray(data.comments) ? data.comments : [];
-              tx.update(ref, { comments: [...comments, review.comments[review.comments.length - 1]] });
-            });
-          } catch (err) {
-            console.error('Firestore comment add error:', err);
-            showToast('댓글 클라우드 저장에 실패했습니다.');
-          }
-        }
-        
+        if (!Array.isArray(review.comments)) review.comments = [];
+        review.comments.push({...comment, _subcollection: true});
+        saveReviewsToStorage(false);
         input.value = '';
-        
-        const modal = document.getElementById('post-detail-modal');
-        if (!modal.classList.contains('hidden')) {
-          openGroupDetailModal(review.workKey || review.title);
-        } else {
-          renderFeed();
-        }
-
+        await openGroupDetailModal(review.workKey || review.title);
         showToast("댓글이 작성되었습니다!");
+      } catch (err) {
+        console.error('Comment add error:', err);
+        showToast('댓글 저장에 실패했습니다.');
       }
     }
 
     async function deleteComment(reviewId, commentId) {
       const review = state.reviews.find(r => r.id === reviewId);
-      if (review && review.comments) {
-        const comment = review.comments.find(c => c.id === commentId);
-        if (!comment) return;
-        if (state.activeUser !== comment.author) {
-          showToast(`댓글 삭제 권한이 없습니다. '${comment.author}' 이름을 선택해주세요.`);
-          return;
-        }
+      const comment = review?.comments?.find(c => c.id === commentId);
+      if (!review || !comment) return;
+      if (!comment.authorUid || comment.authorUid !== state.activeUserUid || !comment._subcollection) {
+        showToast(`댓글 삭제 권한이 없습니다. (${comment.author} 님 작성)`);
+        return;
+      }
+      if (!isFirebaseConnected || !db) return;
+      try {
+        await db.collection('artifacts').doc(appId).collection('public').doc('data')
+          .collection('reviews').doc(reviewId).collection('comments').doc(commentId).delete();
         review.comments = review.comments.filter(c => c.id !== commentId);
-        saveReviewsToStorage();
-        if (isFirebaseConnected && db) {
-          const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(review.id);
-          try {
-            await db.runTransaction(async tx => {
-              const snap = await tx.get(ref);
-              if (!snap.exists) throw new Error('Review document not found');
-              const data = snap.data() || {};
-              const comments = Array.isArray(data.comments) ? data.comments : [];
-              tx.update(ref, { comments: comments.filter(c => c.id !== commentId) });
-            });
-          } catch (err) {
-            console.error('Firestore comment delete error:', err);
-            showToast('댓글 클라우드 삭제에 실패했습니다.');
-          }
-        }
-        openGroupDetailModal(review.workKey || review.title);
+        saveReviewsToStorage(false);
+        await openGroupDetailModal(review.workKey || review.title);
         showToast("댓글이 삭제되었습니다.");
+      } catch (err) {
+        console.error('Comment delete error:', err);
+        showToast('댓글 삭제에 실패했습니다.');
       }
     }
 
     async function editComment(reviewId, commentId) {
       const review = state.reviews.find(r => r.id === reviewId);
-      if (!review || !review.comments) return;
-
-      const comment = review.comments.find(c => c.id === commentId);
-      if (!comment) return;
-
-      const canEdit = !!state.activeUser && state.activeUser === comment.author && (!comment.authorUid || comment.authorUid === state.activeUserUid);
-      if (!canEdit) {
+      const comment = review?.comments?.find(c => c.id === commentId);
+      if (!review || !comment) return;
+      if (!comment.authorUid || comment.authorUid !== state.activeUserUid || !comment._subcollection) {
         showToast(`댓글 수정 권한이 없습니다. (${comment.author} 님 작성)`);
         return;
       }
-
       showInputModal(
         "댓글 수정하기",
         "수정할 댓글 내용을 입력하세요...",
         async (newText) => {
-          if (newText.trim()) {
-            comment.text = newText.trim();
-            comment.updatedAt = new Date().toISOString();
-            saveReviewsToStorage();
-            if (isFirebaseConnected && db) {
-              const ref = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('reviews').doc(review.id);
-              try {
-                await db.runTransaction(async tx => {
-                  const snap = await tx.get(ref);
-                  if (!snap.exists) throw new Error('Review document not found');
-                  const data = snap.data() || {};
-                  const comments = Array.isArray(data.comments) ? data.comments.map(c => c.id === commentId ? {...c, text: comment.text, updatedAt: comment.updatedAt} : c) : [];
-                  tx.update(ref, { comments });
-                });
-              } catch (err) {
-                console.error('Firestore comment edit error:', err);
-                showToast('댓글 클라우드 수정에 실패했습니다.');
-              }
-            }
-            openGroupDetailModal(review.workKey || review.title);
+          const cleanText = newText.trim();
+          if (!cleanText) return;
+          try {
+            if (!isFirebaseConnected || !db) throw new Error('Firebase unavailable');
+            await db.collection('artifacts').doc(appId).collection('public').doc('data')
+              .collection('reviews').doc(reviewId).collection('comments').doc(commentId).update({
+                text: cleanText,
+                updatedAt: new Date().toISOString()
+              });
+            review.comments = review.comments.map(c => c.id === commentId ? {...c, text: cleanText, updatedAt: new Date().toISOString()} : c);
+            saveReviewsToStorage(false);
+            await openGroupDetailModal(review.workKey || review.title);
             showToast("댓글이 수정되었습니다.");
+          } catch (err) {
+            console.error('Comment edit error:', err);
+            showToast('댓글 수정에 실패했습니다.');
           }
         },
         comment.text
